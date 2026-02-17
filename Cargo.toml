@@ -1,0 +1,15 @@
+[package]
+name = "lynxctl"
+version = "0.1.0"
+edition = "2021"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.27", features = ["fs", "user"] }
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+anyhow = "1.0"
+ctrlc = "3.4"
+whoami = "1.4"
+qrcode = "0.12"
+console = "0.15"
