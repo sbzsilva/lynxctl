@@ -116,68 +116,6 @@ fn main() {
             print_usage();
         }
     }
-        Some(("users", sub_m)) => {
-            let action = sub_m.get_one::<String>("action").unwrap();
-            match action.as_str() {
-                "list" => users::list_clients(),
-                "create" => {
-                    if let Some(name) = sub_m.get_one::<String>("name") {
-                        users::create_user(name);
-                    } else {
-                        eprintln!("Invalid user action or missing name.");
-                        process::exit(1);
-                    }
-                },
-                "delete" => {
-                    if let Some(name) = sub_m.get_one::<String>("name") {
-                        users::delete_user(name);
-                    } else {
-                        eprintln!("Invalid user action or missing name.");
-                        process::exit(1);
-                    }
-                },
-                "qr" => {
-                    if let Some(name) = sub_m.get_one::<String>("name") {
-                        users::show_qr(name);
-                    } else {
-                        eprintln!("Invalid user action or missing name.");
-                        process::exit(1);
-                    }
-                },
-                _ => eprintln!("Invalid user action or missing name."),
-            }
-        },
-        Some(("network", sub_m)) => {
-            let action = sub_m.get_one::<String>("action").unwrap();
-            match action.as_str() {
-                "live" => network::run_live_dashboard(),
-                "status" => network::show_status_dashboard(),
-                "netinfo" => system::netinfo(),
-                "whitelist" => {
-                    if let Some(domain) = sub_m.get_one::<String>("domain") {
-                        network::whitelist_domain(domain);
-                    } else {
-                        eprintln!("Invalid network action.");
-                        process::exit(1);
-                    }
-                },
-                _ => eprintln!("Invalid network action."),
-            }
-        },
-        Some(("system", sub_m)) => {
-            let action = sub_m.get_one::<String>("action").unwrap();
-            match action.as_str() {
-                "update" => system::update_ads(),
-                "upgrade" => system::upgrade_system(),
-                "test" => network::test_blocking(),
-                "sync" => system::sync_kernel(),
-                _ => eprintln!("Invalid system action."),
-            }
-        },
-        _ => {
-            print_usage();
-        }
-    }
 }
 
 fn print_banner() {
@@ -201,7 +139,18 @@ fn print_usage() {
         ("system", "update, upgrade, test, sync"),
     ];
 
-    for (name, actions) in categories {
-        println!("  - {:<10}:  {}", console::style(name).cyan(), actions); 
+    for (cat, actions) in &categories {
+        println!("  {}: {}", 
+            console::style(cat).yellow(), 
+            console::style(actions).green());
     }
+
+    println!("\nExamples:");
+    println!("  lynxctl users list         # List all users");
+    println!("  lynxctl users create alice # Create user alice");
+    println!("  lynxctl users qr alice     # Show QR code for alice");
+    println!("  lynxctl network status     # Show network status");
+    println!("  lynxctl network live       # Start live dashboard");
+    println!("  lynxctl system sync        # Sync kernel with config");
+    println!("  lynxctl system update      # Update ad blockers");
 }
