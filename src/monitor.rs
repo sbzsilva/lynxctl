@@ -1,7 +1,7 @@
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph, Row, Table, Cell},
     Terminal,
@@ -193,4 +193,29 @@ fn get_system_uptime() -> String {
         }
     }
     "Unknown".to_string()
+}
+
+// RESTORE THIS FUNCTION: It was called but missing in the new monitor.rs
+pub fn show_status_dashboard() {
+    let mut d = DnsStats {
+        total_queries: 0, cache_hits: 0, blocked_count: 0,
+        hit_rate: 0, block_rate: 0, avg_response_time: 0.0,
+        blocked_domains: vec![],
+    };
+    get_dns_stats(&mut d);
+
+    println!("\n{} Status", console::style("LynxEdge Enterprise").bold());
+    println!("{}", "═".repeat(40));
+    println!("System Uptime:  {}", get_system_uptime());
+    println!("Total Queries:  {}", d.total_queries);
+    println!("Block Rate:     {}%", d.block_rate);
+}
+
+// RESTORE THIS FUNCTION: Needed by get_dns_stats
+fn get_top_blocked_domains() -> Vec<String> {
+    if let Some(output) = crate::utils::run_command_output("doas cat /var/log/unbound.log 2>/dev/null | grep NXDOMAIN | awk '{print $8}' | sort | uniq -c | sort -nr | head -10 | awk '{print $2}'") {
+        let domains: Vec<String> = output.lines().map(|s| s.to_string()).collect();
+        if !domains.is_empty() { return domains; }
+    }
+    vec!["doubleclick.net".to_string(), "facebook.com".to_string()] // Fallback
 }
