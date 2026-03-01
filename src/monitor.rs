@@ -249,9 +249,30 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 pub fn get_active_peers_with_usage() -> (Vec<(String, String)>, Vec<(String, String)>) {
     let mut sessions = Vec::new();
     let mut usage = Vec::new();
-    // (Implementation of wg show parsing as provided in earlier turns)
-    while sessions.len() < 5 { sessions.push(("".to_string(), "".to_string())); }
-    while usage.len() < 5 { usage.push(("".to_string(), "".to_string())); }
+
+    // Use the dump format for reliable tab-separated parsing
+    if let Some(output) = crate::utils::run_command_output("doas wg show wg0 dump") {
+        for line in output.lines().skip(1) { 
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() >= 7 {
+                let public_key = parts[0];
+                let rx = parts[5].parse::<u64>().unwrap_or(0);
+                let tx = parts[6].parse::<u64>().unwrap_or(0);
+
+                // Map Public Key to Profile Name by searching client configs
+                let profile = crate::utils::run_command_output(&format!(
+                    "doas grep -l '{}' /etc/wireguard/clients/*.conf", public_key
+                )).map(|path| path.split('/').last().unwrap_or("").replace(".conf", ""))
+                  .unwrap_or_else(|| public_key[0..8].to_string());
+
+                let transfer_str = format!("{:.2} MB ↑ / {:.2} MB ↓", 
+                    tx as f32 / 1_000_000.0, rx as f32 / 1_000_000.0);
+
+                sessions.push((profile.trim().to_string(), "Active".to_string()));
+                usage.push(("".to_string(), transfer_str));
+            }
+        }
+    }
     (sessions, usage)
 }
 
@@ -284,11 +305,14 @@ pub fn show_status_dashboard() {
 
 // RESTORE THIS FUNCTION: Needed by get_dns_stats
 fn get_top_blocked_domains() -> Vec<String> {
-    if let Some(output) = crate::utils::run_command_output("doas cat /var/log/unbound.log 2>/dev/null | grep NXDOMAIN | awk '{print $8}' | sort | uniq -c | sort -nr | head -10 | awk '{print $2}'") {
-        let domains: Vec<String> = output.lines().map(|s| s.to_string()).collect();
-        if !domains.is_empty() { return domains; }
+    // Specifically targets the NXDOMAIN (blocked) entries in the log
+    let cmd = "doas grep 'NXDOMAIN' /var/log/unbound.log | tail -n 20 | awk '{print $NF}'";
+    if let Some(output) = crate::utils::run_command_output(cmd) {
+        let mut domains: Vec<String> = output.lines().rev().map(|s| s.to_string()).collect();
+        domains.dedup(); // Remove duplicates for a cleaner list
+        return domains;
     }
-    vec!["doubleclick.net".to_string(), "facebook.com".to_string()] // Fallback
+    vec![]
 }
 
 // Helper function to get live blocked stats
