@@ -143,11 +143,11 @@ pub fn list_clients() {
 }
 
 pub fn show_qr(name: &str) {
-    // Uses 'doas cat' to read the restricted config file and pipes it to qrencode
-    let cmd = format!("doas cat /etc/wireguard/clients/{}.conf | qrencode -t ansiutf8", name);
+    // Use full path to qrencode and 'doas cat' to read the restricted config file
+    let cmd = format!("doas cat /etc/wireguard/clients/{}.conf | /usr/local/bin/qrencode -t ansiutf8", name);
     
     if !utils::run_command(&cmd) {
-        eprintln!("{} Failed to display QR code. Check if 'qrencode' is installed and doas permissions.", 
+        eprintln!("{} Failed to display QR code. Check if 'qrencode' is installed at /usr/local/bin/qrencode and doas permissions.", 
             style("[ERROR]").red());
     }
 }
