@@ -137,20 +137,23 @@ pub fn run_live_dashboard() -> io::Result<()> {
             
             f.render_stateful_widget(table, chunks[3], &mut vpn_table_state);
 
-            // --- SCROLLABLE DNS BLOCK LOG ---
-            let blocked_rows: Vec<ListItem> = d.blocked_domains.iter()
-                .map(|domain| {
+            // --- SCROLLABLE DNS BLOCK LOG WITH HIT COUNTS ---
+            let (blocked_domains, counts) = get_live_blocked_stats(); // Now we call the function!
+
+            let blocked_rows: Vec<ListItem> = blocked_domains.iter().zip(counts.iter())
+                .map(|(domain, count)| {
                     ListItem::new(Line::from(vec![
-                        Span::styled(" > ", Style::default().fg(Color::Red)),
+                        Span::styled(format!(" {:>3}x ", count), Style::default().fg(Color::Gray)),
+                        Span::styled(" ✖ ", Style::default().fg(Color::Red)),
                         Span::raw(domain),
                     ]))
                 }).collect();
 
             let blocked_list = List::new(blocked_rows)
-                .block(Block::default().title(" Real-time DNS Block Log ").borders(Borders::ALL))
-                .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
-                .highlight_symbol(">>");
-            
+                .block(Block::default().title(" Real-time DNS Block Log (Rolling) ").borders(Borders::ALL))
+                .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::DarkGray))
+                .highlight_symbol(">> ");
+
             f.render_stateful_widget(blocked_list, chunks[4], &mut dns_list_state);
 
             // --- FOOTER ---
@@ -190,10 +193,11 @@ pub fn run_live_dashboard() -> io::Result<()> {
             get_net_stats("wg0", &mut n);
             get_dns_stats(&mut d);
             
-            // Auto-scroll to the bottom for "rolling" effect
-            if d.blocked_domains.len() > 0 {
-                let last_index = d.blocked_domains.len() - 1;
-                dns_list_state.select(Some(last_index));
+            // Auto-scroll logic for rolling effect
+            let (domains, _) = get_live_blocked_stats(); 
+            if !domains.is_empty() {
+                // Select the most recent (last) entry to keep the view "rolling"
+                dns_list_state.select(Some(domains.len() - 1));
             }
             
             last_tick = Instant::now();
