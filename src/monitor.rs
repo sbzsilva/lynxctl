@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph, Row, Table, Cell},
+    widgets::{Block, Borders, Gauge, Paragraph, Row, Table, Cell, List, ListItem},
     Terminal,
 };
 use crossterm::{
@@ -57,37 +57,28 @@ pub fn run_live_dashboard() -> io::Result<()> {
                 .direction(Direction::Vertical)
                 .margin(1)
                 .constraints([
-                    Constraint::Length(9),  // Branding
+                    Constraint::Length(3),  // Header (Compact version)
                     Constraint::Length(3),  // Network Gauges
-                    Constraint::Length(4),  // NEW: DNS Intelligence Block
-                    Constraint::Min(5),     // Peer Table
+                    Constraint::Length(4),  // DNS Intelligence Stats
+                    Constraint::Min(6),     // Active VPN Sessions
+                    Constraint::Length(10), // NEW: Top Blocked Domains
                     Constraint::Length(1),  // Footer
                 ].as_ref())
                 .split(f.size());
 
-            // --- BRANDING SECTION ---
-            let ascii_brand = r#"
-    __                  ____   __          
-   / /  __ _____ __ __ / __/__/ /__ ____ 
-  / /__/ // / _ \\ \ // _// _  / _ `/ -_)
- /____/\_, /_//_/_\\_\/___/\_,_/\_, /\__/ 
-      /___/                   /___/      "#;
-
-            let branding = Paragraph::new(vec![
-                Line::from(Span::styled(ascii_brand, Style::default().fg(Color::Cyan))),
+            // --- COMPACT HEADER (Replacing the ASCII banner) ---
+            let header = Paragraph::new(vec![
                 Line::from(vec![
-                    Span::styled(" LYNXEDGE ENTERPRISE CORE v4.2", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(" LYNXEDGE ENTERPRISE CORE v4.2", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)),
                     Span::styled(format!("    UPTIME: {}", get_system_uptime()), Style::default().fg(Color::DarkGray)),
                 ]),
                 Line::from(vec![
-                    Span::raw(" [UNBOUND: "),
-                    Span::styled("ACTIVE", Style::default().fg(Color::Green)),
-                    Span::raw("]      [WIREGUARD: "),
-                    Span::styled("ACTIVE", Style::default().fg(Color::Green)),
+                    Span::raw(" [UNBOUND: "), Span::styled("ACTIVE", Style::default().fg(Color::Green)),
+                    Span::raw("]   [WIREGUARD: "), Span::styled("ACTIVE", Style::default().fg(Color::Green)),
                     Span::raw("]"),
                 ]),
-            ]).block(Block::default().borders(Borders::NONE));
-            f.render_widget(branding, chunks[0]);
+            ]).block(Block::default().borders(Borders::BOTTOM));
+            f.render_widget(header, chunks[0]);
 
             // --- NETWORK LOAD SECTION ---
             let net_chunks = Layout::default()
@@ -142,9 +133,24 @@ pub fn run_live_dashboard() -> io::Result<()> {
                 .block(Block::default().title(" Active VPN Sessions ").borders(Borders::ALL));
             f.render_widget(table, chunks[3]);
 
+            // --- NEW: TOP BLOCKED DOMAINS SECTION ---
+            let blocked_rows: Vec<ListItem> = d.blocked_domains.iter()
+                .map(|domain| {
+                    ListItem::new(Line::from(vec![
+                        Span::styled(" ✖ ", Style::default().fg(Color::Red)),
+                        Span::raw(domain),
+                    ]))
+                }).collect();
+
+            let blocked_list = List::new(blocked_rows)
+                .block(Block::default().title(" Real-time DNS Block Log ").borders(Borders::ALL))
+                .style(Style::default().fg(Color::White));
+            
+            f.render_widget(blocked_list, chunks[4]);
+
             // --- FOOTER ---
             let footer = Paragraph::new("[Q] EXIT | [L] LOGS | [S] SETTINGS").style(Style::default().dim());
-            f.render_widget(footer, chunks[4]);
+            f.render_widget(footer, chunks[5]);
         })?;
 
         // 3. Handle Keyboard Events (Non-blocking)
@@ -187,8 +193,19 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
         for line in output.lines() {
             if line.starts_with("total.num.queries=") {
                 stats.total_queries = line.split('=').nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+            } else if line.starts_with("total.num.cachehits=") {
+                stats.cache_hits = line.split('=').nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+            } else if line.starts_with("num.answer.rcode.NXDOMAIN=") {
+                stats.blocked_count = line.split('=').nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+            } else if line.starts_with("total.answer.time.avg=") {
+                // Convert seconds to milliseconds
+                stats.avg_response_time = line.split('=').nth(1).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0) * 1000.0;
             }
-            // ... parse other metrics ...
+        }
+        // Calculate rates for the gauges
+        if stats.total_queries > 0 {
+            stats.hit_rate = (stats.cache_hits * 100) / stats.total_queries;
+            stats.block_rate = (stats.blocked_count * 100) / stats.total_queries;
         }
     }
     stats.blocked_domains = get_top_blocked_domains();

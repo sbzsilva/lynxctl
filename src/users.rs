@@ -139,7 +139,7 @@ pub fn show_qr(name: &str) {
     let cmd = format!("doas cat /etc/wireguard/clients/{}.conf | qrencode -t ansiutf8", name);
     
     if !utils::run_command(&cmd) {
-        eprintln!("{} Failed to display QR code. Ensure 'qrencode' is installed.", 
+        eprintln!("{} Failed to display QR code. Check if 'qrencode' is installed and doas permissions.", 
             style("[ERROR]").red());
     }
 }
