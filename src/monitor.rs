@@ -63,8 +63,8 @@ pub fn run_live_dashboard() -> io::Result<()> {
                     Constraint::Length(4),  // Header
                     Constraint::Length(3),  // Network Gauges
                     Constraint::Length(4),  // DNS Stats
-                    Constraint::Percentage(40), // Active VPN Sessions (Scrollable)
-                    Constraint::Min(10),    // Real-time DNS Block Log (Expanded & Scrollable)
+                    Constraint::Percentage(30), // Active VPN Sessions (enough for ~8 users)
+                    Constraint::Min(15),    // Real-time DNS Block Log (expanded & Scrollable)
                     Constraint::Length(1),  // Footer
                 ].as_ref())
                 .split(f.size());

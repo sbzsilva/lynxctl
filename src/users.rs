@@ -55,7 +55,7 @@ pub fn create_user(name: &str) {
                 client_config, name, ip
             );
             
-            if utils::run_command(&cmd) {
+            if utils::run_interactive_command(&cmd) {
                 println!("{} Profile for {} created.", 
                     style("[SUCCESS]").green(), name);
                 // Immediately call show_qr to display the code
@@ -91,7 +91,7 @@ pub fn delete_user(name: &str) {
     // Use doas to remove the file since it's in a root-owned directory
     let cmd = format!("doas rm {}", path);
     
-    if utils::run_command(&cmd) {
+    if utils::run_interactive_command(&cmd) {
         println!("{} Deleted {}.conf", style("Deleted").red(), name);
         crate::system::sync_kernel(); 
     } else {
@@ -146,7 +146,7 @@ pub fn show_qr(name: &str) {
     // Use full path to qrencode and 'doas cat' to read the restricted config file
     let cmd = format!("doas cat /etc/wireguard/clients/{}.conf | /usr/local/bin/qrencode -t ansiutf8", name);
     
-    if !utils::run_command(&cmd) {
+    if !utils::run_interactive_command(&cmd) {
         eprintln!("{} Failed to display QR code. Check if 'qrencode' is installed at /usr/local/bin/qrencode and doas permissions.", 
             style("[ERROR]").red());
     }
