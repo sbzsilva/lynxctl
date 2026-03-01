@@ -59,6 +59,7 @@ pub fn run_live_dashboard() -> io::Result<()> {
                 .constraints([
                     Constraint::Length(9),  // Branding & System Status
                     Constraint::Length(3),  // Network Load Gauges
+                    Constraint::Length(3),  // DNS Gauges
                     Constraint::Min(8),     // Peer & DNS Tables
                     Constraint::Length(1),  // Footer
                 ].as_ref())
@@ -108,6 +109,28 @@ pub fn run_live_dashboard() -> io::Result<()> {
                 .label(format!("{} kbps", n.kbps_tx));
             f.render_widget(tx_gauge, net_chunks[1]);
 
+            // --- DNS INTELLIGENCE SECTION ---
+            let dns_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(chunks[2]);
+
+            // Display Cache Hit Rate
+            let cache_gauge = Gauge::default()
+                .block(Block::default().title(" Cache Hit Rate ").borders(Borders::ALL))
+                .gauge_style(Style::default().fg(Color::Green))
+                .percent(d.hit_rate as u16) // This "reads" the field
+                .label(format!("{}%", d.hit_rate));
+            f.render_widget(cache_gauge, dns_chunks[0]);
+
+            // Display Block Rate
+            let block_gauge = Gauge::default()
+                .block(Block::default().title(" DNS Block Rate ").borders(Borders::ALL))
+                .gauge_style(Style::default().fg(Color::Red))
+                .percent(d.block_rate as u16) // This "reads" the field
+                .label(format!("{}%", d.block_rate));
+            f.render_widget(block_gauge, dns_chunks[1]);
+
             // --- PEER USAGE SECTION ---
             let (peers, usage) = get_active_peers_with_usage();
             let rows: Vec<Row> = peers.iter().zip(usage.iter()).map(|(p, u)| {
@@ -121,11 +144,11 @@ pub fn run_live_dashboard() -> io::Result<()> {
             let table = Table::new(rows, [Constraint::Length(15), Constraint::Length(20), Constraint::Min(20)])
                 .header(Row::new(vec!["Profile", "Last Activity", "Lifetime Transfer"]).style(Style::default().add_modifier(Modifier::BOLD)))
                 .block(Block::default().title(" Active VPN Sessions ").borders(Borders::ALL));
-            f.render_widget(table, chunks[2]);
+            f.render_widget(table, chunks[3]);
 
             // --- FOOTER ---
             let footer = Paragraph::new("[Q] EXIT | [L] LOGS | [S] SETTINGS").style(Style::default().dim());
-            f.render_widget(footer, chunks[3]);
+            f.render_widget(footer, chunks[4]);
         })?;
 
         // 3. Handle Keyboard Events (Non-blocking)
