@@ -144,7 +144,7 @@ pub fn run_live_dashboard() -> io::Result<()> {
 
             // --- FOOTER ---
             let footer = Paragraph::new("[Q] EXIT | [L] LOGS | [S] SETTINGS").style(Style::default().dim());
-            f.render_widget(footer, chunks[5]);
+            f.render_widget(footer, chunks[4]);
         })?;
 
         // 3. Handle Keyboard Events (Non-blocking)

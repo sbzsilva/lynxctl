@@ -35,10 +35,9 @@ pub fn create_user(name: &str) {
                 }
             };
             
-            // Generate client config
+            // Generate client config template
             let client_config = format!(
-                "# ClientPublicKey = $pub\n\
-                [Interface]\n\
+                "[Interface]\n\
                 PrivateKey = $priv\n\
                 Address = {}/32\n\
                 DNS = {}\n\n\
@@ -49,20 +48,22 @@ pub fn create_user(name: &str) {
                 ip, WG_GW, server_pub, server_ip
             );
             
-            // Create the command to generate and save the config
+            // Use doas to write the file to the restricted directory and update the kernel
             let cmd = format!(
                 "priv=$(wg genkey); pub=$(echo $priv | wg pubkey); \
-                printf '{}' > /etc/wireguard/clients/{}.conf && \
-                wg set wg0 peer \"$pub\" allowed-ips {}/32",
-                client_config.replace("'", "'\"'\"'"), name, ip
+                config_content=\"$(echo '{}' | sed \"s/\\$priv/$priv/\")\"; \
+                echo \"$config_content\" | doas tee /etc/wireguard/clients/{}.conf > /dev/null && \
+                doas wg set wg0 peer \"$pub\" allowed-ips {}/32",
+                client_config, name, ip
             );
             
             if utils::run_command(&cmd) {
                 println!("{} Profile for {} created.", 
                     style("[SUCCESS]").green(), name);
+                // Immediately call show_qr to display the code
                 show_qr(name);
             } else {
-                eprintln!("{} Failed to create WireGuard profile.", 
+                eprintln!("{} Failed to create WireGuard profile. Check doas permissions.", 
                     style("[ERROR]").red());
             }
         },
@@ -74,35 +75,12 @@ pub fn create_user(name: &str) {
 }
 
 fn get_next_available_ip() -> Result<String> {
-    // In a real implementation, this would scan existing configs to find an available IP
-    // For now, we'll simulate finding an IP
     for i in 2..255 {
         let target = format!("10.200.200.{}", i);
         
-        // Check if this IP is already used in any client config
-        let clients_dir = Path::new("/etc/wireguard/clients");
-        if clients_dir.exists() {
-            if let Ok(entries) = fs::read_dir(clients_dir) {
-                let mut found = false;
-                for entry in entries.flatten() {
-                    if let Some(filename) = entry.file_name().to_str() {
-                        if filename.ends_with(".conf") {
-                            if let Ok(content) = fs::read_to_string(entry.path()) {
-                                if content.contains(&target) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                if !found {
-                    return Ok(target);
-                }
-            }
-        } else {
-            // If directory doesn't exist, return the first IP
+        // Use doas to check directory existence and file contents due to restricted permissions
+        let check_cmd = format!("doas grep -r \"{}\" /etc/wireguard/clients/", target);
+        if !utils::run_command(&check_cmd) {
             return Ok(target);
         }
     }
@@ -131,11 +109,11 @@ pub fn list_clients() {
         style("IP Address").bold());
     println!("{}", "─".repeat(50));
 
-    // Use doas to list files and cat content to bypass permission denied errors
+    // Use doas to list files to bypass permission denied errors
     let cmd = "doas ls /etc/wireguard/clients/*.conf 2>/dev/null || true";
     if let Some(output) = utils::run_command_output(cmd) {
         if output.trim().is_empty() {
-            eprintln!("{} Directory /etc/wireguard/clients does not exist or is empty", style("[ERROR]").red());
+            eprintln!("{} No client configurations found.", style("[ERROR]").red());
             return;
         }
         
@@ -159,7 +137,7 @@ pub fn list_clients() {
 }
 
 pub fn show_qr(name: &str) {
-    // Added 'doas' to read the config and redirected to qrencode
+    // Uses 'doas cat' to read the restricted config file and pipes it to qrencode
     let cmd = format!("doas cat /etc/wireguard/clients/{}.conf | qrencode -t ansiutf8", name);
     
     if !utils::run_command(&cmd) {
