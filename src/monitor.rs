@@ -250,7 +250,7 @@ pub fn get_active_peers_with_usage() -> (Vec<(String, String)>, Vec<(String, Str
     let mut sessions = Vec::new();
     let mut usage = Vec::new();
 
-    // Use the dump format for reliable tab-separated parsing
+    // 1. Get the WireGuard dump
     if let Some(output) = crate::utils::run_command_output("doas wg show wg0 dump") {
         for line in output.lines().skip(1) { 
             let parts: Vec<&str> = line.split('\t').collect();
@@ -259,11 +259,20 @@ pub fn get_active_peers_with_usage() -> (Vec<(String, String)>, Vec<(String, Str
                 let rx = parts[5].parse::<u64>().unwrap_or(0);
                 let tx = parts[6].parse::<u64>().unwrap_or(0);
 
-                // Map Public Key to Profile Name by searching client configs
-                let profile = crate::utils::run_command_output(&format!(
-                    "doas grep -l '{}' /etc/wireguard/clients/*.conf", public_key
-                )).map(|path| path.split('/').last().unwrap_or("").replace(".conf", ""))
-                  .unwrap_or_else(|| public_key[0..8].to_string());
+                // 2. Reliable Profile Lookup: Loop through files to find the key
+                let find_cmd = format!("doas grep -l '{}' /etc/wireguard/clients/*.conf", public_key);
+                let profile = crate::utils::run_command_output(&find_cmd)
+                    .map(|path| {
+                        path.trim()
+                            .split('/')
+                            .last()
+                            .unwrap_or("Unknown")
+                            .replace(".conf", "")
+                    })
+                    .unwrap_or_else(|| {
+                        // Fallback to first 8 chars of key if file lookup fails
+                        format!("Key:{}..", &public_key[0..6])
+                    });
 
                 let transfer_str = format!("{:.2} MB ↑ / {:.2} MB ↓", 
                     tx as f32 / 1_000_000.0, rx as f32 / 1_000_000.0);
@@ -317,10 +326,10 @@ fn get_top_blocked_domains() -> Vec<String> {
 
 // Helper function to get live blocked stats
 fn get_live_blocked_stats() -> (Vec<String>, Vec<i32>) {
-    // Parse the unbound log to get blocked domains and their hit counts
-    if let Some(output) = crate::utils::run_command_output(
-        "doas awk '/NXDOMAIN/ && /unbound/ {print $(NF-1)}' /var/log/unbound.log | sort | uniq -c | sort -nr | head -10"
-    ) {
+    // 3. Fixed DNS Log Parsing: specifically looking for NXDOMAIN responses
+    let cmd = "doas grep 'NXDOMAIN' /var/log/unbound.log | awk '{print $NF}' | sort | uniq -c | sort -nr | head -10";
+    
+    if let Some(output) = crate::utils::run_command_output(cmd) {
         let mut domains = Vec::new();
         let mut counts = Vec::new();
         
@@ -333,7 +342,6 @@ fn get_live_blocked_stats() -> (Vec<String>, Vec<i32>) {
                 }
             }
         }
-        
         return (domains, counts);
     }
     

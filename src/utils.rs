@@ -33,30 +33,24 @@ pub fn is_service_running(service_name: &str) -> bool {
     }
 }
 
-/// Run a command and return its output as a string (useful for status checks)
+/// Run a command and return its output as a string (Silent for TUI)
 pub fn run_command_output(cmd: &str) -> Option<String> {
-    // Enrich the PATH to ensure tools like qrencode are found
     let enriched_cmd = format!("export PATH=\"$PATH:/usr/local/bin:/usr/bin:/bin\"; {}", cmd);
     let output = Command::new("sh")
         .arg("-c")
-        .arg(enriched_cmd)
-        .output(); // .output() captures stdout/stderr automatically
+        .arg(&enriched_cmd)
+        .output(); // .output() captures both stdout and stderr
         
     match output {
-        Ok(output) => {
-            if output.status.success() {
-                Some(String::from_utf8_lossy(&output.stdout).to_string())
+        Ok(out) => {
+            if out.status.success() {
+                Some(String::from_utf8_lossy(&out.stdout).to_string())
             } else {
-                // Print the error for diagnostic purposes
-                eprintln!("Command failed: {}", cmd);
-                eprintln!("Error: {}", String::from_utf8_lossy(&output.stderr));
+                // Return None silently to avoid corrupting the TUI display
                 None
             }
         },
-        Err(e) => {
-            eprintln!("Failed to execute command: {}", e);
-            None
-        },
+        Err(_) => None,
     }
 }
 
