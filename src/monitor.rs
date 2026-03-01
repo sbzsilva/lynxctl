@@ -314,11 +314,11 @@ pub fn show_status_dashboard() {
 
 // RESTORE THIS FUNCTION: Needed by get_dns_stats
 fn get_top_blocked_domains() -> Vec<String> {
-    // Specifically targets the NXDOMAIN (blocked) entries in the log
-    let cmd = "doas grep 'NXDOMAIN' /var/log/unbound.log | tail -n 20 | awk '{print $NF}'";
+    // We target field $7, which is the domain in standard Unbound logs
+    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | tail -n 20 | awk '{print $7}'";
     if let Some(output) = crate::utils::run_command_output(cmd) {
-        let mut domains: Vec<String> = output.lines().rev().map(|s| s.to_string()).collect();
-        domains.dedup(); // Remove duplicates for a cleaner list
+        let mut domains: Vec<String> = output.lines().rev().map(|s| s.trim_end_matches('.').to_string()).collect();
+        domains.dedup(); 
         return domains;
     }
     vec![]
@@ -326,9 +326,9 @@ fn get_top_blocked_domains() -> Vec<String> {
 
 // Helper function to get live blocked stats
 fn get_live_blocked_stats() -> (Vec<String>, Vec<i32>) {
-    // Improved AWK to handle standard OpenBSD Unbound log lines
-    // This looks for 'NXDOMAIN' and grabs the domain, usually 3rd to last field
-    let cmd = "doas grep 'NXDOMAIN' /var/log/unbound.log | awk '{print $(NF-2)}' | sort | uniq -c | sort -nr | head -10";
+    // 1. Corrected path to /var/unbound/unbound.log
+    // 2. Using $7 to accurately grab the domain name
+    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | awk '{print $7}' | sort | uniq -c | sort -nr | head -10";
     
     if let Some(output) = crate::utils::run_command_output(cmd) {
         let mut domains = Vec::new();
@@ -339,13 +339,12 @@ fn get_live_blocked_stats() -> (Vec<String>, Vec<i32>) {
             if parts.len() >= 2 {
                 if let Ok(count) = parts[0].parse::<i32>() {
                     counts.push(count);
-                    // Clean up potential trailing dots in domain names
+                    // Standardize domain names by removing trailing dots
                     domains.push(parts[1].trim_end_matches('.').to_string());
                 }
             }
         }
         return (domains, counts);
     }
-    
     (vec![], vec![])
 }
