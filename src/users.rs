@@ -35,22 +35,15 @@ pub fn create_user(name: &str) {
             
             // Generate client config template
             let client_config = format!(
-                "[Interface]\n\
-                PrivateKey = $priv\n\
-                Address = {}/32\n\
-                DNS = {}\n\n\
-                [Peer]\n\
-                PublicKey = {}\n\
-                Endpoint = {}:51820\n\
-                AllowedIPs = 0.0.0.0/0\n",
+                "[Interface]\nPrivateKey = %s\nAddress = {}/32\nDNS = {}\n\n[Peer]\nPublicKey = {}\nEndpoint = {}:51820\nAllowedIPs = 0.0.0.0/0\n",
                 ip, WG_GW, server_pub, server_ip
             );
             
-            // Use doas to write the file to the restricted directory and update the kernel
+            // Use printf to safely inject the private key without delimiter conflicts
             let cmd = format!(
                 "priv=$(wg genkey); pub=$(echo $priv | wg pubkey); \
-                config_content=\"$(echo '{}' | sed \"s/\\$priv/$priv/\")\"; \
-                echo \"$config_content\" | doas tee /etc/wireguard/clients/{}.conf > /dev/null && \
+                template=\"{}\"; \
+                printf \"$template\" \"$priv\" | doas tee /etc/wireguard/clients/{}.conf > /dev/null && \
                 doas wg set wg0 peer \"$pub\" allowed-ips {}/32",
                 client_config, name, ip
             );
