@@ -86,7 +86,8 @@ fn main() {
             print_banner();
             let action = sub_m.get_one::<String>("action").unwrap();
             match action.as_str() {
-                "live" => network::run_live_dashboard(),
+                // Use .expect() to handle the Result and return ()
+                "live" => network::run_live_dashboard().expect("Failed to run live dashboard"),
                 "status" => network::show_status_dashboard(),
                 "netinfo" => system::netinfo(),
                 "whitelist" => {
@@ -119,7 +120,7 @@ fn main() {
 }
 
 fn print_banner() {
-    println!("{}", console::style("    __                ____   __          ").cyan());
+    println!("{}", console::style("    __                  ____   __          ").cyan());
     println!("{}", console::style("   / /  __ _____ __ __ / __/__/ /__ ____ ").cyan());
     println!("{}", console::style("  / /__/ // / _ \\\\ \\ // _// _  / _ `/ -_)").cyan());
     println!("{}", console::style(" /____/\\_, /_//_/_\\_\\/___/\\_,_/\\_, /\\__/ ").cyan());
