@@ -1,6 +1,6 @@
 use std::process::{Command, Stdio};
 
-/// Check if a service is running by name
+/// Check if a service is running by name (e.g., "unbound")
 pub fn is_service_running(service_name: &str) -> bool {
     let result = Command::new("pgrep")
         .arg("-x")
@@ -15,12 +15,12 @@ pub fn is_service_running(service_name: &str) -> bool {
     }
 }
 
-/// Run a command and return its output as a string
+/// Run a command and return its output as a string (useful for status checks)
 pub fn run_command_output(cmd: &str) -> Option<String> {
     let output = Command::new("sh")
         .arg("-c")
         .arg(cmd)
-        .output();
+        .output(); // .output() captures stdout/stderr automatically
         
     match output {
         Ok(output) => {
@@ -34,13 +34,14 @@ pub fn run_command_output(cmd: &str) -> Option<String> {
     }
 }
 
-/// Run a command and return if it was successful
+/// Run a command silently and return if it was successful
+/// Updated with Stdio::null() to prevent UI leakage
 pub fn run_command(cmd: &str) -> bool {
     let result = Command::new("sh")
         .arg("-c")
         .arg(cmd)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::null()) // Suppress raw command output
+        .stderr(Stdio::null()) // Suppress error messages
         .status();
         
     match result {

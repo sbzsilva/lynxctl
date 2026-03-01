@@ -6,36 +6,53 @@ use crate::utils;
 pub fn sync_kernel() {
     println!("{}", style("Rebuilding WireGuard Kernel State...").yellow());
 
-    // 1. Re-initialize interface address
-    if !utils::run_command("ifconfig wg0 inet 10.200.200.1 255.255.255.0 up") {
+    // Phase 1: Interface Configuration
+    println!("{} Configuring WireGuard interface...", style("→").blue());
+    if utils::run_command("doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up") {
+        println!(" {} Interface UP", style("✓").green());
+    } else {
         eprintln!("{} Failed to configure wg0 interface", style("[ERROR]").red());
-        return;
+        println!("{} Attempting to create interface...", style("→").blue());
+        if utils::run_command("doas ifconfig wg0 create && doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up") {
+            println!(" {} Interface Created and UP", style("✓").green());
+        } else {
+            eprintln!("{} Failed to create and configure wg0 interface", style("[ERROR]").red());
+            return;
+        }
     }
 
-    // 2. Load Server Private Key
-    if !utils::run_command("wg set wg0 private-key /etc/wireguard/keys/server.key") {
+    // Phase 2: Key Management
+    println!("{} Loading server private key...", style("→").blue());
+    if utils::run_command("doas wg set wg0 private-key /etc/wireguard/keys/server.key") {
+        println!(" {} Server Key Loaded", style("✓").green());
+    } else {
         eprintln!("{} Failed to set server private key", style("[ERROR]").red());
         return;
     }
 
-    // 3. Purge existing peers from kernel to ensure clean sync
-    if !utils::run_command(
-        "wg show wg0 peers | while read -r peer; do wg set wg0 peer $peer remove; done"
-    ) {
-        eprintln!("{} Failed to purge existing peers", style("[ERROR]").red());
+    // Phase 3: Peer Synchronization
+    println!("{} Syncing peers from config files...", style("→").blue());
+    
+    // First, remove all existing peers
+    if utils::run_command("doas wg show wg0 peers | while read -r peer; do doas wg set wg0 peer \"$peer\" remove; done") {
+        println!(" {} Existing peers removed", style("✓").green());
+    } else {
+        eprintln!("{} Failed to remove existing peers", style("[ERROR]").red());
         return;
     }
 
-    // 4. Atomic push from .conf files to Kernel
+    // Now add peers from config files
     let atomic_push_cmd = concat!(
         "for f in /etc/wireguard/clients/*.conf; do ",
-        "pub=$(grep 'PublicKey =' $f | awk '{print $3}'); ",
-        "ip=$(grep 'Address =' $f | awk '{print $3}' | cut -d/ -f1); ",
+        "pub=$(grep 'PublicKey' $f | tail -n 1 | awk '{print $NF}'); ",
+        "ip=$(grep 'Address' $f | awk '{print $3}' | cut -d'/' -f1); ",
         "if [ -n \"$pub\" ] && [ -n \"$ip\" ]; then ",
         "doas wg set wg0 peer \"$pub\" allowed-ips \"$ip/32\"; fi; done"
     );
 
-    if !utils::run_command(atomic_push_cmd) {
+    if utils::run_command(atomic_push_cmd) {
+        println!(" {} Peers Synced", style("✓").green());
+    } else {
         eprintln!("{} Failed to sync peers from config files", style("[ERROR]").red());
         return;
     }

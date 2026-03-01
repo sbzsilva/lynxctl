@@ -112,13 +112,14 @@ fn get_next_available_ip() -> Result<String> {
 
 pub fn delete_user(name: &str) {
     let path = format!("/etc/wireguard/clients/{}.conf", name);
+    // Use doas to remove the file since it's in a root-owned directory
+    let cmd = format!("doas rm {}", path);
     
-    match fs::remove_file(&path) {
-        Ok(_) => {
-            println!("{} Deleted {}.conf", style("Deleted").red(), name);
-            crate::system::sync_kernel(); // Sync after deletion
-        },
-        Err(e) => eprintln!("Delete failed: {}", e),
+    if utils::run_command(&cmd) {
+        println!("{} Deleted {}.conf", style("Deleted").red(), name);
+        crate::system::sync_kernel(); 
+    } else {
+        eprintln!("Delete failed for {}", name);
     }
 }
 
@@ -130,38 +131,27 @@ pub fn list_clients() {
         style("IP Address").bold());
     println!("{}", "─".repeat(50));
 
-    let clients_dir = Path::new("/etc/wireguard/clients");
-    if !clients_dir.exists() {
-        eprintln!("{} Directory /etc/wireguard/clients does not exist", style("[ERROR]").red());
-        return;
-    }
-
-    if let Ok(entries) = fs::read_dir(clients_dir) {
-        for entry in entries.flatten() {
-            if let Some(filename) = entry.file_name().to_str() {
-                if filename.ends_with(".conf") {
-                    let name = filename.strip_suffix(".conf").unwrap_or(filename);
-                    
-                    // Extract IP from config file
-                    let mut ip = "Unknown".to_string();
-                    if let Ok(content) = fs::read_to_string(entry.path()) {
-                        for line in content.lines() {
-                            if line.starts_with("Address = ") {
-                                // Extract IP without /32 suffix
-                                if let Some(addr_part) = line.strip_prefix("Address = ") {
-                                    ip = addr_part.split('/').next().unwrap_or("Unknown").to_string();
-                                    break;
-                                }
-                            }
-                        }
+    // Use doas to list files and cat content to bypass permission denied errors
+    let cmd = "doas ls /etc/wireguard/clients/*.conf 2>/dev/null || true";
+    if let Some(output) = utils::run_command_output(cmd) {
+        if output.trim().is_empty() {
+            eprintln!("{} Directory /etc/wireguard/clients does not exist or is empty", style("[ERROR]").red());
+            return;
+        }
+        
+        for path in output.lines() {
+            let name = path.split('/').last().unwrap_or("").strip_suffix(".conf").unwrap_or("");
+            let mut ip = "Unknown".to_string();
+            
+            // Use doas to read the specific config
+            if let Some(content) = utils::run_command_output(&format!("doas cat {}", path)) {
+                for line in content.lines() {
+                    if line.contains("Address = ") {
+                        ip = line.split('=').nth(1).unwrap_or("").trim().split('/').next().unwrap_or("Unknown").to_string();
                     }
-                    
-                    println!("{:<15} {:<15} {:<15}", 
-                        name, 
-                        style("AVAILABLE").green(), 
-                        ip);
                 }
             }
+            println!("{:<15} {:<15} {:<15}", name, style("AVAILABLE").green(), ip);
         }
     } else {
         eprintln!("{} Could not read clients directory", style("[ERROR]").red());
@@ -169,9 +159,11 @@ pub fn list_clients() {
 }
 
 pub fn show_qr(name: &str) {
-    let cmd = format!("qrencode -t ansiutf8 < /etc/wireguard/clients/{}.conf", name);
+    // Added 'doas' to read the config and redirected to qrencode
+    let cmd = format!("doas cat /etc/wireguard/clients/{}.conf | qrencode -t ansiutf8", name);
     
     if !utils::run_command(&cmd) {
-        eprintln!("Failed to display QR code for {}", name);
+        eprintln!("{} Failed to display QR code. Ensure 'qrencode' is installed.", 
+            style("[ERROR]").red());
     }
 }
