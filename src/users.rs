@@ -119,11 +119,19 @@ pub fn list_clients() {
             let name = path.split('/').last().unwrap_or("").strip_suffix(".conf").unwrap_or("");
             let mut ip = "Unknown".to_string();
             
-            // Use doas to read the specific config
+            // Fixed parsing: Look for 'Address =' and extract the IP accurately
             if let Some(content) = utils::run_command_output(&format!("doas cat {}", path)) {
                 for line in content.lines() {
-                    if line.contains("Address = ") {
-                        ip = line.split('=').nth(1).unwrap_or("").trim().split('/').next().unwrap_or("Unknown").to_string();
+                    if line.trim().starts_with("Address") {
+                        // Splits "Address = 10.200.200.2/32" and takes the IP part
+                        ip = line.split('=')
+                            .nth(1)
+                            .unwrap_or("")
+                            .trim()
+                            .split('/')
+                            .next()
+                            .unwrap_or("Unknown")
+                            .to_string();
                     }
                 }
             }

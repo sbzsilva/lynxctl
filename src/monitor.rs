@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph, Row, Table, Cell, List, ListItem},
+    widgets::{Block, Borders, Gauge, Paragraph, Row, Table, Cell, List, ListItem, TableState, ListState},
     Terminal,
 };
 use crossterm::{
@@ -47,6 +47,9 @@ pub fn run_live_dashboard() -> io::Result<()> {
         block_rate: 0, avg_response_time: 0.0, blocked_domains: vec![] 
     };
 
+    let mut vpn_table_state = TableState::default();
+    let mut dns_list_state = ListState::default();
+
     let tick_rate = Duration::from_millis(1000);
     let mut last_tick = Instant::now();
 
@@ -57,16 +60,16 @@ pub fn run_live_dashboard() -> io::Result<()> {
                 .direction(Direction::Vertical)
                 .margin(1)
                 .constraints([
-                    Constraint::Length(3),  // Header (Compact version)
+                    Constraint::Length(4),  // Header
                     Constraint::Length(3),  // Network Gauges
-                    Constraint::Length(4),  // DNS Intelligence Stats
-                    Constraint::Min(6),     // Active VPN Sessions
-                    Constraint::Length(10), // NEW: Top Blocked Domains
+                    Constraint::Length(4),  // DNS Stats
+                    Constraint::Percentage(40), // Active VPN Sessions (Scrollable)
+                    Constraint::Min(10),    // Real-time DNS Block Log (Expanded & Scrollable)
                     Constraint::Length(1),  // Footer
                 ].as_ref())
                 .split(f.size());
 
-            // --- COMPACT HEADER (Replacing the ASCII banner) ---
+            // --- CLEAN COMPACT HEADER ---
             let header = Paragraph::new(vec![
                 Line::from(vec![
                     Span::styled(" LYNXEDGE ENTERPRISE CORE v4.2", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)),
@@ -118,7 +121,7 @@ pub fn run_live_dashboard() -> io::Result<()> {
             
             f.render_widget(dns_info, chunks[2]);
 
-            // --- PEER USAGE SECTION ---
+            // --- SCROLLABLE PEER TABLE ---
             let (peers, usage) = get_active_peers_with_usage();
             let rows: Vec<Row> = peers.iter().zip(usage.iter()).map(|(p, u)| {
                 Row::new(vec![
@@ -129,24 +132,26 @@ pub fn run_live_dashboard() -> io::Result<()> {
             }).collect();
 
             let table = Table::new(rows, [Constraint::Length(15), Constraint::Length(20), Constraint::Min(20)])
-                .header(Row::new(vec!["Profile", "Last Activity", "Lifetime Transfer"]).style(Style::default().add_modifier(Modifier::BOLD)))
+                .header(Row::new(vec!["Profile", "Last Activity", "Lifetime Transfer"]).style(Style::default().bold()))
                 .block(Block::default().title(" Active VPN Sessions ").borders(Borders::ALL));
-            f.render_widget(table, chunks[3]);
+            
+            f.render_stateful_widget(table, chunks[3], &mut vpn_table_state);
 
-            // --- NEW: TOP BLOCKED DOMAINS SECTION ---
+            // --- SCROLLABLE DNS BLOCK LOG ---
             let blocked_rows: Vec<ListItem> = d.blocked_domains.iter()
                 .map(|domain| {
                     ListItem::new(Line::from(vec![
-                        Span::styled(" ✖ ", Style::default().fg(Color::Red)),
+                        Span::styled(" > ", Style::default().fg(Color::Red)),
                         Span::raw(domain),
                     ]))
                 }).collect();
 
             let blocked_list = List::new(blocked_rows)
                 .block(Block::default().title(" Real-time DNS Block Log ").borders(Borders::ALL))
-                .style(Style::default().fg(Color::White));
+                .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+                .highlight_symbol(">>");
             
-            f.render_widget(blocked_list, chunks[4]);
+            f.render_stateful_widget(blocked_list, chunks[4], &mut dns_list_state);
 
             // --- FOOTER ---
             let footer = Paragraph::new("[Q] EXIT | [L] LOGS | [S] SETTINGS").style(Style::default().dim());
@@ -157,7 +162,26 @@ pub fn run_live_dashboard() -> io::Result<()> {
         let timeout = tick_rate.checked_sub(last_tick.elapsed()).unwrap_or(Duration::from_secs(0));
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('q') { break; }
+                match key.code {
+                    KeyCode::Char('q') => break,
+                    KeyCode::Down => {
+                        // Handle navigation down for DNS list
+                        if !d.blocked_domains.is_empty() {
+                            let next_idx = dns_list_state.selected().map(|i| (i + 1) % d.blocked_domains.len()).unwrap_or(0);
+                            dns_list_state.select(Some(next_idx));
+                        }
+                    },
+                    KeyCode::Up => {
+                        // Handle navigation up for DNS list
+                        if !d.blocked_domains.is_empty() {
+                            let next_idx = dns_list_state.selected().map(|i| {
+                                if i == 0 { d.blocked_domains.len() - 1 } else { i - 1 }
+                            }).unwrap_or(0);
+                            dns_list_state.select(Some(next_idx));
+                        }
+                    },
+                    _ => {}
+                }
             }
         }
 
@@ -165,6 +189,13 @@ pub fn run_live_dashboard() -> io::Result<()> {
         if last_tick.elapsed() >= tick_rate {
             get_net_stats("wg0", &mut n);
             get_dns_stats(&mut d);
+            
+            // Auto-scroll to the bottom for "rolling" effect
+            if d.blocked_domains.len() > 0 {
+                let last_index = d.blocked_domains.len() - 1;
+                dns_list_state.select(Some(last_index));
+            }
+            
             last_tick = Instant::now();
         }
     }
@@ -254,4 +285,29 @@ fn get_top_blocked_domains() -> Vec<String> {
         if !domains.is_empty() { return domains; }
     }
     vec!["doubleclick.net".to_string(), "facebook.com".to_string()] // Fallback
+}
+
+// Helper function to get live blocked stats
+fn get_live_blocked_stats() -> (Vec<String>, Vec<i32>) {
+    // Parse the unbound log to get blocked domains and their hit counts
+    if let Some(output) = crate::utils::run_command_output(
+        "doas awk '/NXDOMAIN/ && /unbound/ {print $(NF-1)}' /var/log/unbound.log | sort | uniq -c | sort -nr | head -10"
+    ) {
+        let mut domains = Vec::new();
+        let mut counts = Vec::new();
+        
+        for line in output.lines() {
+            let parts: Vec<&str> = line.trim().split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let Ok(count) = parts[0].parse::<i32>() {
+                    counts.push(count);
+                    domains.push(parts[1].to_string());
+                }
+            }
+        }
+        
+        return (domains, counts);
+    }
+    
+    (vec![], vec![])
 }
