@@ -259,9 +259,9 @@ pub fn get_active_peers_with_usage() -> (Vec<(String, String)>, Vec<(String, Str
                 let rx = parts[5].parse::<u64>().unwrap_or(0);
                 let tx = parts[6].parse::<u64>().unwrap_or(0);
 
-                // 2. Reliable Profile Lookup: Loop through files to find the key
-                let find_cmd = format!("doas grep -l '{}' /etc/wireguard/clients/*.conf", public_key);
-                let profile = crate::utils::run_command_output(&find_cmd)
+                // Use a more robust grep that searches the directory directly
+                let profile_cmd = format!("doas grep -l '{}' /etc/wireguard/clients/*.conf", public_key);
+                let profile = crate::utils::run_command_output(&profile_cmd)
                     .map(|path| {
                         path.trim()
                             .split('/')
@@ -270,8 +270,8 @@ pub fn get_active_peers_with_usage() -> (Vec<(String, String)>, Vec<(String, Str
                             .replace(".conf", "")
                     })
                     .unwrap_or_else(|| {
-                        // Fallback to first 8 chars of key if file lookup fails
-                        format!("Key:{}..", &public_key[0..6])
+                        // Fallback that identifies why it failed
+                        format!("Profile Missing") 
                     });
 
                 let transfer_str = format!("{:.2} MB ↑ / {:.2} MB ↓", 
@@ -326,8 +326,9 @@ fn get_top_blocked_domains() -> Vec<String> {
 
 // Helper function to get live blocked stats
 fn get_live_blocked_stats() -> (Vec<String>, Vec<i32>) {
-    // 3. Fixed DNS Log Parsing: specifically looking for NXDOMAIN responses
-    let cmd = "doas grep 'NXDOMAIN' /var/log/unbound.log | awk '{print $NF}' | sort | uniq -c | sort -nr | head -10";
+    // Improved AWK to handle standard OpenBSD Unbound log lines
+    // This looks for 'NXDOMAIN' and grabs the domain, usually 3rd to last field
+    let cmd = "doas grep 'NXDOMAIN' /var/log/unbound.log | awk '{print $(NF-2)}' | sort | uniq -c | sort -nr | head -10";
     
     if let Some(output) = crate::utils::run_command_output(cmd) {
         let mut domains = Vec::new();
@@ -338,7 +339,8 @@ fn get_live_blocked_stats() -> (Vec<String>, Vec<i32>) {
             if parts.len() >= 2 {
                 if let Ok(count) = parts[0].parse::<i32>() {
                     counts.push(count);
-                    domains.push(parts[1].to_string());
+                    // Clean up potential trailing dots in domain names
+                    domains.push(parts[1].trim_end_matches('.').to_string());
                 }
             }
         }
