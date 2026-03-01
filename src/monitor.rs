@@ -115,13 +115,13 @@ pub fn run_live_dashboard() -> io::Result<()> {
                     Span::raw(" Total Queries: "),
                     Span::styled(format!("{}", d.total_queries), Style::default().fg(Color::Cyan)),
                     Span::raw("   Cache Hits: "),
-                    Span::styled(format!("{}", d.cache_hits), Style::default().fg(Color::Green)), // Reads cache_hits
+                    Span::styled(format!("{} ({}%)", d.cache_hits, d.hit_rate), Style::default().fg(Color::Green)), // This "reads" hit_rate
                 ]),
                 Line::from(vec![
                     Span::raw(" Blocked: "),
-                    Span::styled(format!("{}", d.blocked_count), Style::default().fg(Color::Red)), // Reads blocked_count
-                    Span::raw("       Latency: "),
-                    Span::styled(format!("{:.2}ms", d.avg_response_time), Style::default().fg(Color::Magenta)), // Reads avg_response_time
+                    Span::styled(format!("{} ({}%)", d.blocked_count, d.block_rate), Style::default().fg(Color::Red)), // This "reads" block_rate
+                    Span::raw("   Latency: "),
+                    Span::styled(format!("{:.2}ms", d.avg_response_time), Style::default().fg(Color::Magenta)), // This "reads" avg_response_time
                 ]),
             ]).block(Block::default().title(" DNS Intelligence ").borders(Borders::ALL));
             
