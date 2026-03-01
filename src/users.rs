@@ -1,5 +1,3 @@
-use std::fs;
-use std::path::Path;
 use anyhow::Result;
 use console::style;
 
