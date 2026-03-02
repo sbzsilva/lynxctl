@@ -14,44 +14,73 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(4),       // Header
-            Constraint::Length(3),       // Trends
+            Constraint::Length(3),       // Header (Reduced to bottom border only)
+            Constraint::Length(6),       // Traffic Card (New nested area)
             Constraint::Length(4),       // DNS Stats
             Constraint::Percentage(30),  // VPN Sessions
-            Constraint::Min(15),         // DNS Logs
+            Constraint::Min(10),         // DNS Logs
             Constraint::Length(1),       // Footer
         ]).split(f.size());
 
-    // --- HEADER ---
-    let header = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled(" LYNXEDGE ENTERPRISE CORE v4.2", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)),
-            Span::styled(format!("  UPTIME: {}", get_system_uptime()), Style::default().fg(Color::DarkGray)),
-        ]),
-        Line::from(vec![
-            Span::raw(" [UNBOUND: "), Span::styled("ACTIVE", Style::default().fg(Color::Green)), Span::raw("] "),
-            Span::raw("[WIREGUARD: "), Span::styled("ACTIVE", Style::default().fg(Color::Green)), Span::raw("]"),
-        ]),
-    ]).block(Block::default().borders(Borders::BOTTOM));
+    // --- MODERN HEADER ---
+    let header = Paragraph::new(Line::from(vec![
+        Span::styled(" LYNXEDGE CORE", Style::default().bold().fg(Color::Cyan)),
+        Span::raw(" | "),
+        Span::styled(format!("UPTIME: {}", get_system_uptime()), Style::default().dim()),
+    ])).block(Block::default().borders(Borders::BOTTOM).border_style(Style::default().fg(Color::DarkGray)));
     f.render_widget(header, chunks[0]);
 
-    // --- TRENDS (Sparklines) ---
-    let trend_chunks = Layout::default()
+    // --- NESTED TRAFFIC CARD ---
+    let traffic_block = Block::default().title(" Traffic (wg0) ").borders(Borders::TOP).border_style(Style::default().dim());
+    let inner_traffic = traffic_block.inner(chunks[1]);
+    f.render_widget(traffic_block, chunks[1]);
+
+    let traffic_split = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[1]);
+        .constraints([Constraint::Min(20), Constraint::Length(30)])
+        .split(inner_traffic);
+
+    // Left: Sparklines
+    let spark_rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(2), Constraint::Length(2)])
+        .split(traffic_split[0]);
 
     let rx_data: Vec<u64> = n.rx_history.iter().cloned().collect();
     let rx_spark = Sparkline::default()
-        .block(Block::default().title(" RX Trend (kbps) ").borders(Borders::ALL))
-        .data(&rx_data).style(Style::default().fg(Color::Green));
-    f.render_widget(rx_spark, trend_chunks[0]);
+        .data(&rx_data)
+        .style(Style::default().fg(Color::Green))
+        .max(100_000); // Scaled for 100Mbps
+    f.render_widget(rx_spark, spark_rows[0]);
 
     let tx_data: Vec<u64> = n.tx_history.iter().cloned().collect();
     let tx_spark = Sparkline::default()
-        .block(Block::default().title(" TX Trend (kbps) ").borders(Borders::ALL))
-        .data(&tx_data).style(Style::default().fg(Color::Yellow));
-    f.render_widget(tx_spark, trend_chunks[1]);
+        .data(&tx_data)
+        .style(Style::default().fg(Color::Yellow))
+        .max(100_000);
+    f.render_widget(tx_spark, spark_rows[1]);
+
+    // Right: Now/Avg/Peak Stats
+    let avg_rx = if !n.rx_history.is_empty() {
+        (n.rx_history.iter().sum::<u64>() / n.rx_history.len() as u64) as u32
+    } else {
+        0
+    };
+    let peak_rx = n.rx_history.iter().max().copied().unwrap_or(0) as u32;
+    let avg_tx = if !n.tx_history.is_empty() {
+        (n.tx_history.iter().sum::<u64>() / n.tx_history.len() as u64) as u32
+    } else {
+        0
+    };
+    let peak_tx = n.tx_history.iter().max().copied().unwrap_or(0) as u32;
+    
+    let stats_text = vec![
+        Line::from(vec![Span::raw("RX "), Span::styled(format!("{:>6} kbps", n.kbps_rx), Style::default().fg(Color::Green).bold())]),
+        Line::from(vec![Span::styled(format!("   Avg: {:>6} Peak: {:>6}", avg_rx, peak_rx), Style::default().dim())]),
+        Line::from(vec![Span::raw("TX "), Span::styled(format!("{:>6} kbps", n.kbps_tx), Style::default().fg(Color::Yellow).bold())]),
+        Line::from(vec![Span::styled(format!("   Avg: {:>6} Peak: {:>6}", avg_tx, peak_tx), Style::default().dim())]),
+    ];
+    f.render_widget(Paragraph::new(stats_text), traffic_split[1]);
 
     // --- DNS STATS ---
     let dns_info = Paragraph::new(vec![
