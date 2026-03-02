@@ -1,14 +1,14 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Style, Stylize}, // Removed Modifier
+    style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Axis, Block, Borders, Cell, Chart, Dataset, GraphType, List, ListItem, ListState, Paragraph, Row, Table, TableState}, // Replaced Sparkline with Chart components
+    widgets::{Axis, Block, Borders, Cell, Chart, Dataset, GraphType, List, ListItem, ListState, Paragraph, Row, Table, TableState},
     symbols,
     Frame,
 };
 use super::data::{DnsStats, NetStats, get_live_blocked_stats, get_system_uptime};
 use super::peers::get_active_peers_with_health;
-use crate::utils; // Added back the utils import for service checks
+use crate::utils;
 
 pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_state: &mut TableState, dns_list_state: &mut ListState) {
     let chunks = Layout::default()
@@ -16,7 +16,7 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .margin(1)
         .constraints([
             Constraint::Length(3),       // Header
-            Constraint::Length(10),      // Traffic Card (Increased height for Chart)
+            Constraint::Length(10),      // Traffic Card
             Constraint::Length(4),       // DNS Stats
             Constraint::Percentage(30),  // VPN Sessions
             Constraint::Min(10),         // DNS Logs
@@ -30,7 +30,6 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         Span::styled("INACTIVE", Style::default().fg(Color::Red))
     };
 
-    // Quick check if wg0 interface is actually UP
     let wg_status = if utils::run_command_output("ifconfig wg0 2>/dev/null | grep -q UP && echo ok").is_some() {
         Span::styled("ACTIVE", Style::default().fg(Color::Green))
     } else {
@@ -51,17 +50,7 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
     
     f.render_widget(header, chunks[0]);
 
-    // --- NESTED TRAFFIC CARD ---
-    let traffic_block = Block::default().title(" Traffic (wg0) ").borders(Borders::TOP).border_style(Style::default().dim());
-    let inner_traffic = traffic_block.inner(chunks[1]);
-    f.render_widget(traffic_block, chunks[1]);
-
-    let traffic_split = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(40), Constraint::Length(30)]) // Give the chart more space for the Y-axis labels
-        .split(inner_traffic);
-
-    // --- TRAFFIC CARD WITH CHART ---
+    // --- TRAFFIC CARD ---
     let traffic_block = Block::default().title(" Traffic (wg0) ").borders(Borders::TOP).border_style(Style::default().dim());
     let inner_traffic = traffic_block.inner(chunks[1]);
     f.render_widget(traffic_block, chunks[1]);
@@ -71,24 +60,34 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .constraints([Constraint::Min(40), Constraint::Length(34)])
         .split(inner_traffic);
 
-    // Chart logic
+    // Chart Data and Logic
     let rx_data = n.get_rx_chart_data();
     let tx_data = n.get_tx_chart_data();
     let peak = n.get_peak_rx().max(n.get_peak_tx()).max(1000) as f64;
 
     let datasets = vec![
-        Dataset::default().name("RX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Green)).data(&rx_data),
-        Dataset::default().name("TX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Yellow)).data(&tx_data),
+        Dataset::default()
+            .name("RX")
+            .marker(symbols::Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::default().fg(Color::Green))
+            .data(&rx_data),
+        Dataset::default()
+            .name("TX")
+            .marker(symbols::Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::default().fg(Color::Yellow))
+            .data(&tx_data),
     ];
 
     let chart = Chart::new(datasets)
-        .x_axis(Axis::default().bounds([0.0, 120.0])) // Matches HISTORY_LIMIT
+        .x_axis(Axis::default().bounds([0.0, 120.0])) 
         .y_axis(Axis::default().title("kbps").bounds([0.0, peak * 1.1]).labels(vec![
             Span::raw("0"), Span::raw(format!("{:.0}", peak)),
         ]));
     f.render_widget(chart, traffic_split[0]);
 
-    // Stats Text (Uses the "unused" methods to clear warnings)
+    // Right side Stats Text
     let stats_text = vec![
         Line::from(vec![Span::raw("RX "), Span::styled(format!("{:>6} kbps", n.kbps_rx), Style::default().fg(Color::Green).bold())]),
         Line::from(vec![Span::styled(format!("   Avg: {:>6} Peak: {:>6}", n.get_avg_rx(), n.get_peak_rx()), Style::default().dim())]),
@@ -144,7 +143,6 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .highlight_style(Style::default().bg(Color::DarkGray))
         .highlight_symbol(">> ");
 
-    // FIX: Use render_stateful_widget and pass the state
     f.render_stateful_widget(rolling_list, dns_log_chunks[0], dns_list_state);
 
     let (top_domains, counts) = get_live_blocked_stats();
@@ -155,7 +153,6 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
     let top_list = List::new(top_items)
         .block(Block::default().title(" Top Blocked ").borders(Borders::ALL));
 
-    // For the Top 10 list, you can either pass a second state or just render it statically
     f.render_widget(top_list, dns_log_chunks[1]);
 
     let footer = Paragraph::new("[Q] EXIT | [↑↓] SCROLL").style(Style::default().dim());
