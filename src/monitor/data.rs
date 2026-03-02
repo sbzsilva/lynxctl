@@ -30,15 +30,30 @@ impl NetStats {
         if self.rx_history.is_empty() { return 0; }
         self.rx_history.iter().sum::<u64>() / self.rx_history.len() as u64
     }
+    
     pub fn get_peak_rx(&self) -> u64 {
-        self.rx_history.iter().cloned().max().unwrap_or(0)
+        *self.rx_history.iter().max().unwrap_or(&0)
     }
+    
     pub fn get_avg_tx(&self) -> u64 {
         if self.tx_history.is_empty() { return 0; }
         self.tx_history.iter().sum::<u64>() / self.tx_history.len() as u64
     }
+    
     pub fn get_peak_tx(&self) -> u64 {
-        self.tx_history.iter().cloned().max().unwrap_or(0)
+        *self.tx_history.iter().max().unwrap_or(&0)
+    }
+
+    pub fn get_rx_chart_data(&self) -> Vec<(f64, f64)> {
+        self.rx_history.iter().enumerate()
+            .map(|(i, &v)| (i as f64, v as f64))
+            .collect()
+    }
+
+    pub fn get_tx_chart_data(&self) -> Vec<(f64, f64)> {
+        self.tx_history.iter().enumerate()
+            .map(|(i, &v)| (i as f64, v as f64))
+            .collect()
     }
 }
 
