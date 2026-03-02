@@ -9,9 +9,20 @@ pub struct NetStats {
     pub last_tx: u64,
     pub kbps_rx: u32,
     pub kbps_tx: u32,
-    // History buffers for Sparklines
     pub rx_history: VecDeque<u64>,
     pub tx_history: VecDeque<u64>,
+}
+
+#[derive(Debug, Default)]
+pub struct DnsStats {
+    pub total_queries: i32,
+    pub cache_hits: i32,
+    pub blocked_count: i32,
+    pub hit_rate: i32,
+    pub block_rate: i32,
+    pub avg_response_time: f32,
+    pub blocked_domains: Vec<String>,
+    pub query_history: VecDeque<u64>,
 }
 
 impl NetStats {
@@ -22,6 +33,13 @@ impl NetStats {
     pub fn get_peak_rx(&self) -> u64 {
         self.rx_history.iter().cloned().max().unwrap_or(0)
     }
+    pub fn get_avg_tx(&self) -> u64 {
+        if self.tx_history.is_empty() { return 0; }
+        self.tx_history.iter().sum::<u64>() / self.tx_history.len() as u64
+    }
+    pub fn get_peak_tx(&self) -> u64 {
+        self.tx_history.iter().cloned().max().unwrap_or(0)
+    }
 }
 
 pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
@@ -29,14 +47,11 @@ pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
         let parts: Vec<&str> = output.split_whitespace().collect();
         if parts.len() >= 3 {
             if let (Ok(rx_val), Ok(tx_val)) = (parts[1].parse::<u64>(), parts[2].parse::<u64>()) {
-                // Calculate delta and convert to kbps
                 stats.kbps_rx = ((rx_val.saturating_sub(stats.last_rx) * 8) / 1024) as u32;
                 stats.kbps_tx = ((tx_val.saturating_sub(stats.last_tx) * 8) / 1024) as u32;
-                
                 stats.last_rx = rx_val;
                 stats.last_tx = tx_val;
 
-                // Maintain history
                 stats.rx_history.push_back(stats.kbps_rx as u64);
                 stats.tx_history.push_back(stats.kbps_tx as u64);
                 if stats.rx_history.len() > HISTORY_LIMIT {
@@ -50,7 +65,7 @@ pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
 
 pub fn get_dns_stats(stats: &mut DnsStats) {
     if let Some(output) = utils::run_command_output("unbound-control stats_noreset") {
-        let mut current_total: i32 = 0; // Explicitly typed to i32
+        let mut current_total: i32 = 0;
         for line in output.lines() {
             if line.starts_with("total.num.queries=") {
                 current_total = line.split('=').nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
