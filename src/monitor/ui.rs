@@ -1,13 +1,13 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Stylize}, // Added Stylize trait
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Gauge, List, ListItem, ListState, Paragraph, Row, Table, TableState, Sparkline},
+    widgets::{Block, Borders, Cell, List, ListItem, ListState, Paragraph, Row, Table, TableState, Sparkline}, // Removed unused Gauge
     Frame,
 };
 use super::data::{DnsStats, NetStats, get_live_blocked_stats, get_system_uptime};
 use super::peers::get_active_peers_with_health;
-use crate::utils;
+// Removed unused crate::utils
 
 pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_state: &mut TableState, dns_list_state: &mut ListState) {
     let chunks = Layout::default()

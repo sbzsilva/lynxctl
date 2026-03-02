@@ -49,7 +49,7 @@ pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
 
 pub fn get_dns_stats(stats: &mut DnsStats) {
     if let Some(output) = utils::run_command_output("unbound-control stats_noreset") {
-        let mut current_total = 0;
+        let mut current_total: i32 = 0; // Explicitly typed to i32
         for line in output.lines() {
             if line.starts_with("total.num.queries=") {
                 current_total = line.split('=').nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
