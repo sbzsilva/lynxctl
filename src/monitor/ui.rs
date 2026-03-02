@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style, Stylize}, // Added Stylize trait
+    style::{Color, Style, Stylize}, // Removed Modifier
     text::{Line, Span},
     widgets::{Axis, Block, Borders, Cell, Chart, Dataset, GraphType, List, ListItem, ListState, Paragraph, Row, Table, TableState}, // Replaced Sparkline with Chart components
     symbols,
