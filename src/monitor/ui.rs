@@ -91,15 +91,27 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
         .split(chunks[4]);
 
-    let rolling_items: Vec<ListItem> = d.blocked_domains.iter().map(|d| ListItem::new(format!(" ✖ {}", d))).collect();
-    let rolling_list = List::new(rolling_items).block(Block::default().title(" Recent Blocks ").borders(Borders::ALL));
-    f.render_widget(rolling_list, dns_log_chunks[0]);
+    let rolling_items: Vec<ListItem> = d.blocked_domains.iter()
+        .map(|d| ListItem::new(format!(" ✖ {}", d)))
+        .collect();
+
+    let rolling_list = List::new(rolling_items)
+        .block(Block::default().title(" Recent Blocks ").borders(Borders::ALL))
+        .highlight_style(Style::default().bg(Color::DarkGray))
+        .highlight_symbol(">> ");
+
+    // FIX: Use render_stateful_widget and pass the state
+    f.render_stateful_widget(rolling_list, dns_log_chunks[0], dns_list_state);
 
     let (top_domains, counts) = get_live_blocked_stats();
-    let top_items: Vec<ListItem> = top_domains.iter().zip(counts.iter()).map(|(d, c)| {
-        ListItem::new(format!(" {:>3}x {}", c, d))
-    }).collect();
-    let top_list = List::new(top_items).block(Block::default().title(" Top Blocked ").borders(Borders::ALL));
+    let top_items: Vec<ListItem> = top_domains.iter().zip(counts.iter())
+        .map(|(d, c)| ListItem::new(format!(" {:>3}x {}", c, d)))
+        .collect();
+
+    let top_list = List::new(top_items)
+        .block(Block::default().title(" Top Blocked ").borders(Borders::ALL));
+
+    // For the Top 10 list, you can either pass a second state or just render it statically
     f.render_widget(top_list, dns_log_chunks[1]);
 
     let footer = Paragraph::new("[Q] EXIT | [↑↓] SCROLL").style(Style::default().dim());
