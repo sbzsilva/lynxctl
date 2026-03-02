@@ -54,40 +54,37 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 }
 
 pub fn get_top_blocked_domains() -> Vec<String> {
-    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log \
-               | awk '{print $7}' | sort | uniq -c | sort -nr \
-               | head -10 | awk '{print $2}'";
+    // Changed $7 to $5 based on your live log format
+    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | tail -n 20 | awk '{print $5}'";
     if let Some(output) = utils::run_command_output(cmd) {
-        let domains: Vec<String> = output
+        let mut domains: Vec<String> = output
             .lines()
             .map(|s| s.trim_end_matches('.').to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        if !domains.is_empty() {
-            return domains;
-        }
+        domains.reverse(); // Show newest first
+        domains.dedup();
+        return domains;
     }
     vec![]
 }
 
 pub fn get_live_blocked_stats() -> (Vec<String>, Vec<u32>) {
-    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log \
-               | awk '{print $7}' | sort | uniq -c | sort -nr | head -10";
+    // Changed $7 to $5 based on your live log format
+    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | awk '{print $5}' | sort | uniq -c | sort -nr | head -10";
     if let Some(output) = utils::run_command_output(cmd) {
         let mut domains = Vec::new();
         let mut counts = Vec::new();
         for line in output.lines() {
-            let parts: Vec<&str> = line.trim().splitn(2, ' ').collect();
-            if parts.len() == 2 {
-                if let Ok(count) = parts[0].trim().parse::<u32>() {
+            let parts: Vec<&str> = line.trim().split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let Ok(count) = parts[0].parse::<u32>() {
                     counts.push(count);
-                    domains.push(parts[1].trim().trim_end_matches('.').to_string());
+                    domains.push(parts[1].trim_end_matches('.').to_string());
                 }
             }
         }
-        if !domains.is_empty() {
-            return (domains, counts);
-        }
+        return (domains, counts);
     }
     (vec![], vec![])
 }
