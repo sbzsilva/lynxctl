@@ -15,8 +15,8 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(3),       // Header (Reduced to bottom border only)
-            Constraint::Length(6),       // Traffic Card (New nested area)
+            Constraint::Length(3),       // Header
+            Constraint::Length(10),      // Traffic Card (Increased height for Chart)
             Constraint::Length(4),       // DNS Stats
             Constraint::Percentage(30),  // VPN Sessions
             Constraint::Min(10),         // DNS Logs
@@ -61,64 +61,39 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .constraints([Constraint::Min(40), Constraint::Length(30)]) // Give the chart more space for the Y-axis labels
         .split(inner_traffic);
 
-    // Left: Chart
+    // --- TRAFFIC CARD WITH CHART ---
+    let traffic_block = Block::default().title(" Traffic (wg0) ").borders(Borders::TOP).border_style(Style::default().dim());
+    let inner_traffic = traffic_block.inner(chunks[1]);
+    f.render_widget(traffic_block, chunks[1]);
+
+    let traffic_split = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(40), Constraint::Length(34)])
+        .split(inner_traffic);
+
+    // Chart logic
     let rx_data = n.get_rx_chart_data();
     let tx_data = n.get_tx_chart_data();
-
-    // Find the peak to auto-scale the Y-axis
     let peak = n.get_peak_rx().max(n.get_peak_tx()).max(1000) as f64;
 
     let datasets = vec![
-        Dataset::default()
-            .name("RX")
-            .marker(symbols::Marker::Braille) // High-density dots
-            .graph_type(GraphType::Line)
-            .style(Style::default().fg(Color::Green))
-            .data(&rx_data),
-        Dataset::default()
-            .name("TX")
-            .marker(symbols::Marker::Braille)
-            .graph_type(GraphType::Line)
-            .style(Style::default().fg(Color::Yellow))
-            .data(&tx_data),
+        Dataset::default().name("RX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Green)).data(&rx_data),
+        Dataset::default().name("TX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Yellow)).data(&tx_data),
     ];
 
     let chart = Chart::new(datasets)
-        .block(Block::default().title(" Network Throughput (60s) ").borders(Borders::NONE))
-        .x_axis(Axis::default()
-            .style(Style::default().gray())
-            .bounds([0.0, 60.0])) // Last 60 seconds
-        .y_axis(Axis::default()
-            .title("kbps")
-            .style(Style::default().gray())
-            .bounds([0.0, peak * 1.2]) // 20% headroom
-            .labels(vec![
-                Span::raw("0"),
-                Span::raw(format!("{:.0}", peak / 2.0)),
-                Span::raw(format!("{:.0}", peak)),
-            ]));
-
+        .x_axis(Axis::default().bounds([0.0, 120.0])) // Matches HISTORY_LIMIT
+        .y_axis(Axis::default().title("kbps").bounds([0.0, peak * 1.1]).labels(vec![
+            Span::raw("0"), Span::raw(format!("{:.0}", peak)),
+        ]));
     f.render_widget(chart, traffic_split[0]);
 
-    // Right: Now/Avg/Peak Stats
-    let avg_rx = if !n.rx_history.is_empty() {
-        (n.rx_history.iter().sum::<u64>() / n.rx_history.len() as u64) as u32
-    } else {
-        0
-    };
-    let peak_rx = n.get_peak_rx() as u32;
-    let avg_tx = if !n.tx_history.is_empty() {
-        (n.tx_history.iter().sum::<u64>() / n.tx_history.len() as u64) as u32
-    } else {
-        0
-    };
-    let peak_tx = n.get_peak_tx() as u32;
-    
+    // Stats Text (Uses the "unused" methods to clear warnings)
     let stats_text = vec![
         Line::from(vec![Span::raw("RX "), Span::styled(format!("{:>6} kbps", n.kbps_rx), Style::default().fg(Color::Green).bold())]),
-        Line::from(vec![Span::styled(format!("   Avg: {:>6} Peak: {:>6}", avg_rx, peak_rx), Style::default().dim())]),
+        Line::from(vec![Span::styled(format!("   Avg: {:>6} Peak: {:>6}", n.get_avg_rx(), n.get_peak_rx()), Style::default().dim())]),
         Line::from(vec![Span::raw("TX "), Span::styled(format!("{:>6} kbps", n.kbps_tx), Style::default().fg(Color::Yellow).bold())]),
-        Line::from(vec![Span::styled(format!("   Avg: {:>6} Peak: {:>6}", avg_tx, peak_tx), Style::default().dim())]),
+        Line::from(vec![Span::styled(format!("   Avg: {:>6} Peak: {:>6}", n.get_avg_tx(), n.get_peak_tx()), Style::default().dim())]),
     ];
     f.render_widget(Paragraph::new(stats_text), traffic_split[1]);
 
