@@ -147,6 +147,13 @@ pub fn run_security_audit() {
 
         println!("\nAudit finished with {} issues found.", issues);
     }
+    let net_check = "curl -s --connect-timeout 2 https://ifconfig.me";
+    if utils::run_command_output(net_check).is_some() {
+        println!(" {} Internet connectivity verified (WAN IP reachable).", "✓".green());
+    } else {
+        println!(" {} ERROR: Service user cannot reach the internet.", "✗".red());
+        issues += 1;
+    }
 
 pub fn upgrade_system() {
     println!("{}", style("Starting Full System Upgrade...").cyan());
