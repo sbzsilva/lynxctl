@@ -3,7 +3,7 @@ compile_error!("This application is designed to run on Unix-like systems only.")
 
 use std::process;
 use clap::{Arg, Command};
-use console; //console crate
+use console; // 保留 console crate 用于样式打印，但移除未使用的 Style
 
 mod users;
 mod network;
@@ -73,7 +73,7 @@ fn main() {
                 },
                 "qr" => {
                     if let Some(name) = sub_m.get_one::<String>("name") {
-                        users::show_qr(name);
+                        users::show_existing_qr(name); // Using the function that checks if profile exists
                     } else {
                         eprintln!("Invalid user action or missing name.");
                         process::exit(1);
