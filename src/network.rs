@@ -8,7 +8,7 @@ pub fn whitelist_domain(domain: &str) {
         println!("{} Whitelisted {}. Restarting Unbound...", 
             style("[OK]").green(), domain);
         
-        if crate::utils::run_command("rcctl restart unbound") {
+        if crate::utils::run_command("doas rcctl restart unbound") {
             println!("Unbound restarted successfully");
         } else {
             eprintln!("Failed to restart Unbound");
@@ -18,15 +18,3 @@ pub fn whitelist_domain(domain: &str) {
             style("[ERROR]").red(), domain);
     }
 }
-
-pub fn test_blocking() {
-    println!("{} Testing DNS Shield...", style("[-]").cyan()); // Fixed styling call
-    if let Some(result) = crate::utils::run_command_output("host doubleclick.net 127.0.0.1") {
-        println!("{}", result);
-    } else {
-        eprintln!("DNS test command failed. Is 'host' installed?");
-    }
-}
-
-// Export the functions from monitor module that were previously in network
-pub use crate::monitor::{run_live_dashboard, show_status_dashboard};

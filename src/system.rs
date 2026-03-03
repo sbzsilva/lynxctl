@@ -1,7 +1,4 @@
 use console::style;
-use std::fs;
-use std::path::Path;
-
 use crate::utils;
 
 pub fn sync_kernel() {
@@ -88,12 +85,6 @@ pub fn update_ads() {
     }
 }
 
-fn fix_unbound_permissions() {
-    println!("{}", style("  [Applying OpenBSD Chroot Security Fixes...]").dim());
-    utils::run_command("chown root:_unbound /var/unbound/etc");
-    utils::run_command("chmod 775 /var/unbound/etc");
-    utils::run_command("chown _unbound:_unbound /var/unbound/db/root.key >/dev/null 2>&1");
-}
 
 pub fn run_security_audit() {
     println!("{}", style("--- LynxEdge Security Audit ---").bold().cyan());
