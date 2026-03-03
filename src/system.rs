@@ -136,9 +136,17 @@ pub fn run_security_audit() {
         println!(" {} Permission denied on /etc/wireguard/clients.", style("✗").red());
         issues += 1;
     }
+    // Monitoring
+    let monitor_check = "doas -n wg show wg0 transfer >/dev/null 2>&1 && echo 'ok'";
+    if utils::run_command_output(monitor_check).is_some() {
+        println!(" {} Live traffic telemetry access verified.", style("✓").green());
+    } else {
+        println!(" {} ERROR: Restricted telemetry access. Update doas.conf.", style("✗").red());
+        issues += 1;
+    }
 
-    println!("\nAudit finished with {} issues found.", issues);
-}
+        println!("\nAudit finished with {} issues found.", issues);
+    }
 
 pub fn upgrade_system() {
     println!("{}", style("Starting Full System Upgrade...").cyan());
