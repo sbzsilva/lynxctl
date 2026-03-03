@@ -77,21 +77,16 @@ pub fn update_ads() {
     // Phase 1: Ensure permissions are correct before we touch anything
     fix_unbound_permissions();
 
-    println!(" -> Fetching latest OISD blocklist...");
+    println!(" -> Fetching latest OISD blocklist (via DNS Fallback)...");
     let url = "https://big.oisd.nl/unbound";
     let temp_path = "/var/unbound/etc/oisd_blocklist.tmp";
     let final_path = "/var/unbound/etc/oisd_blocklist.conf";
 
-    // Phase 2: Use a DNS Fallback
-    // We use 'host' to verify connectivity to a public resolver (Quad9)
-    // and then use curl with a specified resolver to bypass a potentially broken local Unbound.
-    let download_cmd = format!(
-        "curl -sL --dns-servers 9.9.9.9 {} -o {}", 
-        url, temp_path
-    );
+    // Use Quad9 (9.9.9.9) as a fallback resolver for the download
+    let curl_cmd = format!("curl -sL --dns-servers 9.9.9.9 {} -o {}", url, temp_path);
 
-    if !utils::run_command(&download_cmd) {
-        eprintln!("{} Download failed. Check internet connectivity.", style("[ERROR]").red());
+    if !utils::run_command(&curl_cmd) {
+        eprintln!("{} Download failed. Check network connectivity.", style("[ERROR]").red());
         return;
     }
 

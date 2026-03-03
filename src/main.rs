@@ -73,7 +73,8 @@ fn main() {
                 },
                 "qr" => {
                     if let Some(name) = sub_m.get_one::<String>("name") {
-                        users::show_existing_qr(name); // Using the function that checks if profile exists
+                        // Calling show_existing_qr links the function and clears the warning
+                        users::show_existing_qr(name); 
                     } else {
                         eprintln!("Invalid user action or missing name.");
                         process::exit(1);
