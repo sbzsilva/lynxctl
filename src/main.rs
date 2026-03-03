@@ -3,7 +3,7 @@ compile_error!("This application is designed to run on Unix-like systems only.")
 
 use std::process;
 use clap::{Arg, Command};
-use console; // 保留 console crate 用于样式打印，但移除未使用的 Style
+use console::style;
 
 mod users;
 mod network;
@@ -15,37 +15,24 @@ const WG_GW: &str = "10.200.200.1";
 
 fn main() {
     let matches = Command::new("LynxEdge Control Interface")
-        .version("4.0")
-        .about("A high-performance, consolidated C-core management suite for secure network gateways on OpenBSD.")
+        .version("4.2")
+        .about("A high-performance, consolidated management suite for secure network gateways on OpenBSD.")
         .subcommand(
             Command::new("users")
                 .about("User management: create, delete, list, qr")
-                .arg(Arg::new("action")
-                    .required(true)
-                    .index(1)
-                    .help("Action to perform: create, delete, list, qr"))
-                .arg(Arg::new("name")
-                    .index(2)
-                    .help("Username for create/delete/qr actions")),
+                .arg(Arg::new("action").required(true).index(1))
+                .arg(Arg::new("name").index(2)),
         )
         .subcommand(
             Command::new("network")
                 .about("Network operations: live, status, whitelist, netinfo")
-                .arg(Arg::new("action")
-                    .required(true)
-                    .index(1)
-                    .help("Action to perform: live, status, whitelist, netinfo"))
-                .arg(Arg::new("domain")
-                    .index(2)
-                    .help("Domain for whitelist action")),
+                .arg(Arg::new("action").required(true).index(1))
+                .arg(Arg::new("domain").index(2)),
         )
         .subcommand(
             Command::new("system")
-                .about("System operations: update, upgrade, test, sync")
-                .arg(Arg::new("action")
-                    .required(true)
-                    .index(1)
-                    .help("Action to perform: update, upgrade, test, sync")),
+                .about("System operations: update, upgrade, test, sync, audit")
+                .arg(Arg::new("action").required(true).index(1)),
         )
         .get_matches();
 
@@ -59,7 +46,7 @@ fn main() {
                     if let Some(name) = sub_m.get_one::<String>("name") {
                         users::create_user(name);
                     } else {
-                        eprintln!("Invalid user action or missing name.");
+                        eprintln!("{} Error: Missing username.", style("[ERROR]").red());
                         process::exit(1);
                     }
                 },
@@ -67,36 +54,39 @@ fn main() {
                     if let Some(name) = sub_m.get_one::<String>("name") {
                         users::delete_user(name);
                     } else {
-                        eprintln!("Invalid user action or missing name.");
+                        eprintln!("{} Error: Missing username.", style("[ERROR]").red());
                         process::exit(1);
                     }
                 },
                 "qr" => {
                     if let Some(name) = sub_m.get_one::<String>("name") {
-                        // Calling show_existing_qr links the function and clears the warning
-                        users::show_existing_qr(name); 
+                        users::show_existing_qr(name); // Clears the dead_code warning
                     } else {
-                        eprintln!("Invalid user action or missing name.");
+                        eprintln!("{} Error: Missing username.", style("[ERROR]").red());
                         process::exit(1);
                     }
                 },
-                _ => eprintln!("Invalid user action or missing name."),
+                _ => eprintln!("Invalid user action."),
             }
         },
         Some(("network", sub_m)) => {
-            print_banner();
+            // No banner for 'live' to avoid TUI artifacts
             let action = sub_m.get_one::<String>("action").unwrap();
+            if action != "live" { print_banner(); }
+
             match action.as_str() {
-                // Use .expect() to handle the Result and return ()
-                "live" => network::run_live_dashboard().expect("Failed to run live dashboard"),
-                "status" => network::show_status_dashboard(),
+                "live" => {
+                    if let Err(e) = monitor::run_live_dashboard() {
+                        eprintln!("{} Dashboard error: {}", style("[ERROR]").red(), e);
+                    }
+                },
+                "status" => monitor::show_status_dashboard(),
                 "netinfo" => system::netinfo(),
                 "whitelist" => {
                     if let Some(domain) = sub_m.get_one::<String>("domain") {
                         network::whitelist_domain(domain);
                     } else {
-                        eprintln!("Invalid network action.");
-                        process::exit(1);
+                        eprintln!("{} Error: Missing domain.", style("[ERROR]").red());
                     }
                 },
                 _ => eprintln!("Invalid network action."),
@@ -108,7 +98,7 @@ fn main() {
             match action.as_str() {
                 "update" => system::update_ads(),
                 "upgrade" => system::upgrade_system(),
-                "test" => network::test_blocking(),
+                "test" | "audit" => system::run_security_audit(), // Routes to diagnostic tool
                 "sync" => system::sync_kernel(),
                 _ => eprintln!("Invalid system action."),
             }
@@ -121,38 +111,24 @@ fn main() {
 }
 
 fn print_banner() {
-    println!("{}", console::style("    __                  ____   __          ").cyan());
-    println!("{}", console::style("   / /  __ _____ __ __ / __/__/ /__ ____ ").cyan());
-    println!("{}", console::style("  / /__/ // / _ \\\\ \\ // _// _  / _ `/ -_)").cyan());
-    println!("{}", console::style(" /____/\\_, /_//_/_\\_\\/___/\\_,_/\\_, /\\__/ ").cyan());
-    println!("{}", console::style("      /___/                   /___/      ").cyan());
+    println!("{}", style("    __                  ____   __          ").cyan());
+    println!("{}", style("   / /  __ _____ __ __ / __/__/ /__ ____ ").cyan());
+    println!("{}", style("  / /__/ // / _ \\\\ \\ // _// _  / _ `/ -_)").cyan());
+    println!("{}", style(" /____/\\_, /_//_/_\\_\\/___/\\_,_/\\_, /\\__/ ").cyan());
+    println!("{}", style("      /___/                   /___/      ").cyan());
     println!();
-    println!("{} - LynxEdge Control Interface", 
-        console::style("LYNXCTL(8)").bold());
+    println!("{} - LynxEdge Control Interface", style("LYNXCTL(8)").bold());
 }
 
 fn print_usage() {
-    println!("LYNXCTL(8) - LynxEdge Control Interface");
     println!("Usage: lynxctl [category] [action] [args]\n");
-
     let categories = [
         ("users", "create, delete, list, qr"),
         ("network", "live, status, whitelist, netinfo"),
-        ("system", "update, upgrade, test, sync"),
+        ("system", "update, upgrade, test, sync, audit"),
     ];
 
     for (cat, actions) in &categories {
-        println!("  {}: {}", 
-            console::style(cat).yellow(), 
-            console::style(actions).green());
+        println!("  {}: {}", style(cat).yellow(), style(actions).green());
     }
-
-    println!("\nExamples:");
-    println!("  lynxctl users list         # List all users");
-    println!("  lynxctl users create alice # Create user alice");
-    println!("  lynxctl users qr alice     # Show QR code for alice");
-    println!("  lynxctl network status     # Show network status");
-    println!("  lynxctl network live       # Start live dashboard");
-    println!("  lynxctl system sync        # Sync kernel with config");
-    println!("  lynxctl system update      # Update ad blockers");
 }

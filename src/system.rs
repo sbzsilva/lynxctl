@@ -1,5 +1,6 @@
-use std::fs;
 use console::style;
+use std::fs;
+use std::path::Path;
 
 use crate::utils;
 
@@ -72,40 +73,18 @@ fn sync_pf() {
 }
 
 pub fn update_ads() {
-    println!("{}", style("Starting Integrated OISD Update...").yellow());
-    
-    fix_unbound_permissions();
-
     println!(" -> Fetching latest OISD blocklist (via DNS Fallback)...");
     let url = "https://big.oisd.nl/unbound";
     let out_path = "/var/unbound/etc/oisd_blocklist.conf";
 
-    // Use Quad9 (9.9.9.9) as a fallback resolver so curl works if Unbound is down
+    // Use Quad9 fallback to bypass local DNS issues
     let curl_cmd = format!("curl -sL --dns-servers 9.9.9.9 {} -o {}", url, out_path);
 
-    if !utils::run_command(&curl_cmd) {
-        eprintln!("{} Download failed. Check network connectivity.", style("[ERROR]").red());
-        return;
-    }
-
-    println!(" -> Validating Unbound configuration...");
-    if utils::run_command("unbound-checkconf -q > /dev/null") {
-        if utils::run_command("rcctl restart unbound") {
-            if utils::is_service_running("unbound") {
-                println!("{} DNS Shield updated and active.", 
-                    style("[SUCCESS]").green());
-            } else {
-                eprintln!("{} Unbound failed to restart.", 
-                    style("[ERROR]").red());
-            }
-        } else {
-            eprintln!("{} Failed to restart unbound.", 
-                style("[ERROR]").red());
-        }
+    if utils::run_command(&curl_cmd) {
+        println!(" {} Update downloaded successfully.", style("✓").green());
+        sync_kernel(); // Reload rules
     } else {
-        eprintln!("{} Syntax validation failed. Reverting.", 
-            style("[ERROR]").red());
-        let _ = fs::remove_file(out_path);
+        eprintln!(" {} Download failed. Check PF outbound rules.", style("✗").red());
     }
 }
 
@@ -114,6 +93,59 @@ fn fix_unbound_permissions() {
     utils::run_command("chown root:_unbound /var/unbound/etc");
     utils::run_command("chmod 775 /var/unbound/etc");
     utils::run_command("chown _unbound:_unbound /var/unbound/db/root.key >/dev/null 2>&1");
+}
+
+pub fn run_security_audit() {
+    println!("{}", style("--- LynxEdge Security Audit ---").bold().cyan());
+    let mut issues = 0;
+
+    // 1. Check Service User
+    if utils::run_command_output("id lynxctl").is_some() {
+        println!(" {} Service user 'lynxctl' exists.", style("✓").green());
+    } else {
+        println!(" {} CRITICAL: 'lynxctl' user is missing.", style("✗").red());
+        issues += 1;
+    }
+
+    // 2. Check Directory Permissions
+    let paths = ["/etc/wireguard", "/etc/wireguard/clients"];
+    for path in &paths {
+        let check = format!("doas test -w {} && echo 'ok'", path);
+        if utils::run_command_output(&check).is_some() {
+            println!(" {} Write access to {} is verified.", style("✓").green(), path);
+        } else {
+            println!(" {} ERROR: No write access to {}.", style("✗").red(), path);
+            issues += 1;
+        }
+    }
+
+    // 3. Check for Setuid Bit
+    let perms = utils::run_command_output("stat -f %Sp /usr/local/bin/lynxctl").unwrap_or_default();
+    if perms.contains('s') {
+        println!(" {} Binary setuid bit is active.", style("✓").green());
+    } else {
+        println!(" {} WARNING: setuid bit missing (run build.sh).", style("✗").yellow());
+        issues += 1;
+    }
+
+    // Check if qrencode is available
+    if utils::run_command("which qrencode") {
+        println!(" {} qrencode is installed.", style("✓").green());
+    } else {
+        println!(" {} qrencode MISSING. Install with: pkg_add qrencode", style("✗").red());
+        issues += 1;
+    }
+
+    // Check directory permissions for client configs
+    let check_dir = "doas test -r /etc/wireguard/clients && echo 'OK'";
+    if utils::run_command_output(check_dir).is_some() {
+        println!(" {} Service user can read client directory.", style("✓").green());
+    } else {
+        println!(" {} Permission denied on /etc/wireguard/clients.", style("✗").red());
+        issues += 1;
+    }
+
+    println!("\nAudit finished with {} issues found.", issues);
 }
 
 pub fn upgrade_system() {

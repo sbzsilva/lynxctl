@@ -10,7 +10,7 @@ pub fn create_user(name: &str) {
                 style("[INFO]").color256(24), ip);
             
             // Get server public key
-            let server_pub_result = utils::run_command_output("wg show wg0 public-key");
+            let server_pub_result = utils::run_command_output("doas wg show wg0 public-key");
                 
             let server_pub = match server_pub_result {
                 Some(output) => output.trim().to_string(),
@@ -141,16 +141,21 @@ pub fn show_qr(name: &str) {
 }
 
 pub fn show_existing_qr(name: &str) {
-    // Check if the profile exists first
-    let check_cmd = format!("doas test -f /etc/wireguard/clients/{}.conf && echo 'exists'", name);
+    use std::path::Path;
+    use console::style;
     
-    if let Some(output) = utils::run_command_output(&check_cmd) {
-        if output.trim() == "exists" {
-            show_qr(name);
-        } else {
-            eprintln!("{} Profile '{}' does not exist.", style("[ERROR]").red(), name);
-        }
-    } else {
-        eprintln!("{} Could not verify if profile '{}' exists.", style("[ERROR]").red(), name);
+    let path = format!("/etc/wireguard/clients/{}.conf", name);
+    
+    // Check if the profile exists first
+    if !Path::new(&path).exists() {
+        eprintln!("{} Profile '{}' not found.", style("[ERROR]").red(), name);
+        return;
+    }
+
+    println!("\nScan this code with the WireGuard App:");
+    // Force ansiutf8 for terminal compatibility
+    let cmd = format!("doas qrencode -t ansiutf8 < {}", path);
+    if !utils::run_command(&cmd) {
+        eprintln!("{} Failed to display QR code. Check qrencode installation.", style("[ERROR]").red());
     }
 }
