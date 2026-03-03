@@ -1,0 +1,26 @@
+\documentclass[$if(fontsize)$$fontsize$,$endif$]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+% Professional Blue Headers
+\definecolor{lynxblue}{HTML}{0056b3}
+
+\usepackage{titlesec}
+\titleformat{\section}{\color{lynxblue}\normalfont\Large\bfseries}{\thesection}{1em}{}
+
+\begin{document}
+$if(title)$
+\begin{center}
+    {\Huge \textbf{\color{lynxblue}$title$}} \\
+    \vspace{0.5em}
+    {\Large $subtitle$} \\
+    \vspace{1em}
+    \textit{$author$ | $date$}
+\end{center}
+$endif$
+
+$body$
+\end{document}

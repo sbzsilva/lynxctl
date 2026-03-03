@@ -130,11 +130,27 @@ pub fn list_clients() {
 }
 
 pub fn show_qr(name: &str) {
-    // Use full path to qrencode and 'doas cat' to read the restricted config file
-    let cmd = format!("doas cat /etc/wireguard/clients/{}.conf | /usr/local/bin/qrencode -t ansiutf8", name);
+    // Uses the standard qrencode tool to display a micro-QR in the terminal
+    let cmd = format!("doas qrencode -t ansiutf8 < /etc/wireguard/clients/{}.conf", name);
     
+    println!("\nScan this code with the WireGuard App:");
     if !utils::run_interactive_command(&cmd) {
         eprintln!("{} Failed to display QR code. Check if 'qrencode' is installed at /usr/local/bin/qrencode and doas permissions.", 
             style("[ERROR]").red());
+    }
+}
+
+pub fn show_existing_qr(name: &str) {
+    // Check if the profile exists first
+    let check_cmd = format!("doas test -f /etc/wireguard/clients/{}.conf && echo 'exists'", name);
+    
+    if let Some(output) = utils::run_command_output(&check_cmd) {
+        if output.trim() == "exists" {
+            show_qr(name);
+        } else {
+            eprintln!("{} Profile '{}' does not exist.", style("[ERROR]").red(), name);
+        }
+    } else {
+        eprintln!("{} Could not verify if profile '{}' exists.", style("[ERROR]").red(), name);
     }
 }

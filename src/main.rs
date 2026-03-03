@@ -3,7 +3,7 @@ compile_error!("This application is designed to run on Unix-like systems only.")
 
 use std::process;
 use clap::{Arg, Command};
-use console; // 保留 console crate 用于样式打印，但移除未使用的 Style
+use console; //console crate
 
 mod users;
 mod network;
