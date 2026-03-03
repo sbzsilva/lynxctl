@@ -62,7 +62,8 @@ pub fn sync_kernel() {
 fn sync_pf() {
     println!("{}", style("  [Syncing PF firewall...]").dim());
     
-    if utils::run_command("pfctl -f /etc/pf.conf") {
+    // Fixed: Added doas to allow the lynxctl user to reload rules
+    if utils::run_command("doas pfctl -f /etc/pf.conf") {
         println!("{}", style("  [PF Rules Reloaded]").green());
     } else {
         eprintln!("{} Failed to reload PF rules", style("[ERROR]").red());
