@@ -74,46 +74,38 @@ fn sync_pf() {
 pub fn update_ads() {
     println!("{}", style("Starting Integrated OISD Update...").yellow());
     
-    // Phase 1: Ensure permissions are correct before we touch anything
     fix_unbound_permissions();
 
     println!(" -> Fetching latest OISD blocklist (via DNS Fallback)...");
     let url = "https://big.oisd.nl/unbound";
-    let temp_path = "/var/unbound/etc/oisd_blocklist.tmp";
-    let final_path = "/var/unbound/etc/oisd_blocklist.conf";
+    let out_path = "/var/unbound/etc/oisd_blocklist.conf";
 
-    // Use Quad9 (9.9.9.9) as a fallback resolver for the download
-    let curl_cmd = format!("curl -sL --dns-servers 9.9.9.9 {} -o {}", url, temp_path);
+    // Use Quad9 (9.9.9.9) as a fallback resolver so curl works if Unbound is down
+    let curl_cmd = format!("curl -sL --dns-servers 9.9.9.9 {} -o {}", url, out_path);
 
     if !utils::run_command(&curl_cmd) {
         eprintln!("{} Download failed. Check network connectivity.", style("[ERROR]").red());
         return;
     }
 
-    // Phase 3: Sanity Check
-    // Ensure the file isn't empty before we overwrite our working config.
-    if let Ok(metadata) = fs::metadata(temp_path) {
-        if metadata.len() < 1000 { // OISD Big should be several megabytes
-            eprintln!("{} Downloaded file is too small. Aborting to protect configuration.", style("[ERROR]").red());
-            let _ = fs::remove_file(temp_path);
-            return;
-        }
-    }
-
-    println!(" -> Validating new configuration...");
-    // Move to final path and check syntax before restarting
-    if utils::run_command(&format!("mv {} {}", temp_path, final_path)) {
-        if utils::run_command("unbound-checkconf -q") {
-            println!(" -> Restarting Unbound service...");
-            if utils::run_command("rcctl restart unbound") {
-                println!("{} DNS Shield updated and active.", style("[SUCCESS]").green());
+    println!(" -> Validating Unbound configuration...");
+    if utils::run_command("unbound-checkconf -q > /dev/null") {
+        if utils::run_command("rcctl restart unbound") {
+            if utils::is_service_running("unbound") {
+                println!("{} DNS Shield updated and active.", 
+                    style("[SUCCESS]").green());
             } else {
-                eprintln!("{} Failed to restart service. Check 'doas tail /var/unbound/unbound.log'.", style("[ERROR]").red());
+                eprintln!("{} Unbound failed to restart.", 
+                    style("[ERROR]").red());
             }
         } else {
-            eprintln!("{} Syntax validation failed. Config reverted.", style("[ERROR]").red());
-            let _ = fs::remove_file(final_path);
+            eprintln!("{} Failed to restart unbound.", 
+                style("[ERROR]").red());
         }
+    } else {
+        eprintln!("{} Syntax validation failed. Reverting.", 
+            style("[ERROR]").red());
+        let _ = fs::remove_file(out_path);
     }
 }
 
