@@ -136,24 +136,19 @@ pub fn run_security_audit() {
         println!(" {} Permission denied on /etc/wireguard/clients.", style("✗").red());
         issues += 1;
     }
-    // Monitoring
-    let monitor_check = "doas -n wg show wg0 transfer >/dev/null 2>&1 && echo 'ok'";
-    if utils::run_command_output(monitor_check).is_some() {
-        println!(" {} Live traffic telemetry access verified.", style("✓").green());
+
+    println!("{} Checking internet egress...", style("→").blue());
+    if let Some(output) = utils::run_command_output(net_check) {
+        if !output.trim().is_empty() {
+            println!(" {} Internet reachable (WAN IP: {}).", style("✓").green(), output.trim());
+        }
     } else {
-        println!(" {} ERROR: Restricted telemetry access. Update doas.conf.", style("✗").red());
+        println!(" {} ERROR: Egress blocked. Check PF rules for user 'lynxctl'.", style("✗").red());
         issues += 1;
     }
 
-        println!("\nAudit finished with {} issues found.", issues);
-    }
-    let net_check = "curl -s --connect-timeout 2 https://ifconfig.me";
-    if utils::run_command_output(net_check).is_some() {
-        println!(" {} Internet connectivity verified (WAN IP reachable).", "✓".green());
-    } else {
-        println!(" {} ERROR: Service user cannot reach the internet.", "✗".red());
-        issues += 1;
-    }
+    println!("\nAudit finished with {} issues found.", issues);
+}
 
 pub fn upgrade_system() {
     println!("{}", style("Starting Full System Upgrade...").cyan());
