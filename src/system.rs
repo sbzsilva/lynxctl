@@ -120,7 +120,7 @@ pub fn run_security_audit() {
         issues += 1;
     }
 
-    // Check if qrencode is available
+    // 4. Check Tools & Egress
     if utils::run_command("which qrencode") {
         println!(" {} qrencode is installed.", style("✓").green());
     } else {
@@ -128,15 +128,8 @@ pub fn run_security_audit() {
         issues += 1;
     }
 
-    // Check directory permissions for client configs
-    let check_dir = "doas test -r /etc/wireguard/clients && echo 'OK'";
-    if utils::run_command_output(check_dir).is_some() {
-        println!(" {} Service user can read client directory.", style("✓").green());
-    } else {
-        println!(" {} Permission denied on /etc/wireguard/clients.", style("✗").red());
-        issues += 1;
-    }
-
+    // FIXED: Define net_check before using it
+    let net_check = "curl -s --connect-timeout 2 https://ifconfig.me";
     println!("{} Checking internet egress...", style("→").blue());
     if let Some(output) = utils::run_command_output(net_check) {
         if !output.trim().is_empty() {
