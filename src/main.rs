@@ -11,27 +11,28 @@ mod system;
 mod utils;
 mod monitor;
 
-const WG_GW: &str = "10.200.200.1";
+// Define the global appliance root
+pub const APP_ROOT: &str = "/opt/lynxedge";
 
 fn main() {
     let matches = Command::new("LynxEdge Control Interface")
-        .version("4.2")
-        .about("A high-performance, consolidated management suite for secure network gateways on OpenBSD.")
+        .version("5.0")
+        .about("Enterprise Appliance Controller for hardened OpenBSD network gateways.")
         .subcommand(
             Command::new("users")
-                .about("User management: create, delete, list, qr")
+                .about("Identity Management: create, delete, list, qr")
                 .arg(Arg::new("action").required(true).index(1))
                 .arg(Arg::new("name").index(2)),
         )
         .subcommand(
             Command::new("network")
-                .about("Network operations: live, status, whitelist, netinfo")
+                .about("Network Logic: live, status, whitelist, netinfo")
                 .arg(Arg::new("action").required(true).index(1))
                 .arg(Arg::new("domain").index(2)),
         )
         .subcommand(
             Command::new("system")
-                .about("System operations: update, upgrade, test, sync, audit")
+                .about("Appliance Maintenance: update, upgrade, test, sync, audit")
                 .arg(Arg::new("action").required(true).index(1)),
         )
         .get_matches();
@@ -60,7 +61,7 @@ fn main() {
                 },
                 "qr" => {
                     if let Some(name) = sub_m.get_one::<String>("name") {
-                        users::show_existing_qr(name); // Clears the dead_code warning
+                        users::show_existing_qr(name);
                     } else {
                         eprintln!("{} Error: Missing username.", style("[ERROR]").red());
                         process::exit(1);
@@ -70,7 +71,6 @@ fn main() {
             }
         },
         Some(("network", sub_m)) => {
-            // No banner for 'live' to avoid TUI artifacts
             let action = sub_m.get_one::<String>("action").unwrap();
             if action != "live" { print_banner(); }
 
@@ -98,7 +98,7 @@ fn main() {
             match action.as_str() {
                 "update" => system::update_ads(),
                 "upgrade" => system::upgrade_system(),
-                "test" | "audit" => system::run_security_audit(), // Routes to diagnostic tool
+                "test" | "audit" => system::run_security_audit(),
                 "sync" => system::sync_kernel(),
                 _ => eprintln!("Invalid system action."),
             }
@@ -117,7 +117,7 @@ fn print_banner() {
     println!("{}", style(" /____/\\_, /_//_/_\\_\\/___/\\_,_/\\_, /\\__/ ").cyan());
     println!("{}", style("      /___/                   /___/      ").cyan());
     println!();
-    println!("{} - LynxEdge Control Interface", style("LYNXCTL(8)").bold());
+    println!("{} - LynxEdge Appliance Controller", style("LYNXCTL(8)").bold());
 }
 
 fn print_usage() {
