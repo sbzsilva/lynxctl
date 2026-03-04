@@ -1,8 +1,9 @@
 use console::style;
+use crate::APP_ROOT;
 
 pub fn whitelist_domain(domain: &str) {
-    // Write the domain to the whitelist config file
-    let cmd = format!("echo 'local-zone: \"{}\" transparent' >> /var/unbound/etc/whitelist.conf", domain);
+    // UPDATED: Points to appliance whitelist path
+    let cmd = format!("echo 'local-zone: \"{}\" transparent' >> {}/etc/unbound/whitelist.conf", domain, APP_ROOT);
     
     if crate::utils::run_command(&cmd) {
         println!("{} Whitelisted {}. Restarting Unbound...", 
