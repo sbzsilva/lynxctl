@@ -19,6 +19,12 @@ pub fn print_motd_status() {
         style("○ DOWN").red()
     };
 
+    // Calculate Active Peers for the dashboard
+    let peer_count = utils::run_command_output("doas wg show wg0 peers | wc -l")
+        .unwrap_or_else(|| "0".to_string())
+        .trim()
+        .to_string();
+
     // Dark Mode Dashboard Output
     println!();
     println!("  {}", style("   _                 ").green());
@@ -27,11 +33,11 @@ pub fn print_motd_status() {
     println!("  {}", style("   \\_\\/  Status v5.0 ").green());
     println!();
     
-    // Fixed: wrapped strings in style() before calling .dim()
     println!("  {} {}", style("SYSTEM CONTEXT").bold().dim(), style("─".repeat(26)).dim());
     println!("  {:<15} {}", style("WAN ENDPOINT:").dim(), style(wan_ip).yellow());
     println!("  {:<15} {}", style("DNS SHIELD:").dim(), unbound_status);
     println!("  {:<15} {}", style("VPN TUNNEL:").dim(), wg_status);
+    println!("  {:<15} {}", style("ACTIVE PEERS:").dim(), style(peer_count).cyan());
     println!("  {}", style("─".repeat(40)).dim());
     println!("  {} Run {} for live metrics.", style("NOTICE:").yellow().dim(), style("lynxctl network live").cyan());
     println!();
@@ -111,6 +117,7 @@ pub fn run_security_audit() {
         issues += 1;
     }
 
+    // MD5 Content Verification for partition-safe sync
     let opt_hash = utils::run_command_output(&format!("md5 -q {}/etc/unbound/unbound.conf", APP_ROOT));
     let var_hash = utils::run_command_output("md5 -q /var/unbound/etc/unbound.conf");
 

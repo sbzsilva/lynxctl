@@ -31,7 +31,7 @@ fn main() {
         )
         .subcommand(
             Command::new("system")
-                .about("Appliance Maintenance: update, upgrade, test, sync, audit")
+                .about("Appliance Maintenance: update, upgrade, test, sync, audit, motd")
                 .arg(Arg::new("action").required(true).index(1)),
         )
         .get_matches();
@@ -92,9 +92,12 @@ fn main() {
             }
         },
         Some(("system", sub_m)) => {
-            print_banner();
             let action = sub_m.get_one::<String>("action").unwrap();
+            // Don't print banner for MOTD to keep login clean
+            if action != "motd" { print_banner(); }
+
             match action.as_str() {
+                "motd" => system::print_motd_status(),
                 "update" => system::update_ads(),
                 "upgrade" => system::upgrade_system(),
                 "test" | "audit" => system::run_security_audit(),
@@ -124,7 +127,7 @@ fn print_usage() {
     let categories = [
         ("users", "create, delete, list, qr"),
         ("network", "live, status, whitelist, netinfo"),
-        ("system", "update, upgrade, test, sync, audit"),
+        ("system", "update, upgrade, test, sync, audit, motd"),
     ];
 
     for (cat, actions) in &categories {
