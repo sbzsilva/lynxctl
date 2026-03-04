@@ -83,19 +83,19 @@ pub fn update_ads() {
     println!("{}", style("-> Initiating Threat Intelligence Sync...").bold());
     let out_path = format!("{}/etc/unbound/oisd_blocklist.conf", APP_ROOT);
     
-    // We escape the percent signs by doubling them: %%
+    // We use -f to ensure curl returns a non-zero exit code on HTTP errors
+    // We removed the -w "%{http_code}" to avoid shell interpolation bugs
     let curl_cmd = format!(
-        "doas -u lynxedge curl -f -sSL -w \"%%{{http_code}}\" --cacert /etc/ssl/cert.pem https://big.oisd.nl/unbound -o {}", 
+        "doas -u lynxedge curl -f -sSL --cacert /etc/ssl/cert.pem https://big.oisd.nl/unbound -o {}", 
         out_path
     );
 
-    let output = utils::run_command_output(&curl_cmd);
-    let status = output.as_deref().unwrap_or("000").trim();
-
-    if status == "200" {
-        println!(" {} Downloaded OISD Big list (HTTP 200).", style("✓").green());
+    // Using utils::run_command which checks for exit code 0
+    if utils::run_command(&curl_cmd) {
+        println!(" {} Downloaded OISD Big list successfully.", style("✓").green());
         
-        // Push to jail
+        // Push from appliance root to service jail
+        println!(" {} Deploying to Unbound Jail...", style("→").blue());
         utils::run_command(&format!("doas cp {} /var/unbound/etc/oisd_blocklist.conf", out_path));
         
         if utils::run_command("doas rcctl restart unbound") {
@@ -103,9 +103,7 @@ pub fn update_ads() {
         }
     } else {
         eprintln!(" {} Update failed.", style("✗").red());
-        // This will now show the actual number (e.g., 000, 403, 404)
-        eprintln!("    {} Error Code: {}", style("!").yellow(), status);
-        eprintln!("    {} check: 1. PF Egress | 2. Write perms on /opt/lynxedge/etc/unbound/", style("→").dim());
+        eprintln!("    {} check: 1. PF Egress | 2. Write perms on {}/etc/unbound/", style("→").dim(), APP_ROOT);
     }
 }
 
