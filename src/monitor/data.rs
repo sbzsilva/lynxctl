@@ -115,25 +115,30 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 }
 
 pub fn get_top_blocked_domains() -> Vec<String> {
-    // We look for 'NXDOMAIN' and then grab the domain name.
-    // This command finds 'NXDOMAIN' and prints the field immediately before it
-    let cmd = "doas tail -n 500 /var/unbound/unbound.log | grep 'NXDOMAIN' | awk '{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}'";
+    // Use APP_ROOT for consistent path handling
+    let cmd = format!(
+        "doas tail -n 500 {}/logs/unbound.log | grep 'NXDOMAIN' | awk '{{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}}'", 
+        crate::APP_ROOT
+    );
 
-    if let Some(output) = utils::run_command_output(cmd) {
+    if let Some(output) = crate::utils::run_command_output(&cmd) {
         let mut domains: Vec<String> = output.lines()
             .map(|s| s.trim_end_matches('.').to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        domains.reverse(); // Show newest at the top
+        domains.reverse(); // Newest at the top
         return domains;
     }
     vec![]
 }
 
 pub fn get_live_blocked_stats() -> (Vec<String>, Vec<u32>) {
-    // Updated to use the same logic as Recent Blocks for consistency
-    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | awk '{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}' | sort | uniq -c | sort -nr | head -10";
-    if let Some(output) = utils::run_command_output(cmd) {
+    // Use APP_ROOT for consistent path handling
+    let cmd = format!(
+        "doas grep 'NXDOMAIN' {}/logs/unbound.log | awk '{{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}}' | sort | uniq -c | sort -nr | head -10",
+        crate::APP_ROOT
+    );
+    if let Some(output) = crate::utils::run_command_output(&cmd) {
         let mut domains = Vec::new();
         let mut counts = Vec::new();
         for line in output.lines() {

@@ -14,8 +14,9 @@ pub fn get_active_peers_with_health() -> Vec<(String, String, String, u64)> {
 
                 // FIX: Look specifically in the correct directory for the profile
                 let profile_cmd = format!(
-                    "doas grep -l '{}' /etc/wireguard/clients/*.conf", 
-                    public_key
+                    "doas grep -l '{}' {}/etc/wireguard/clients/*.conf", 
+                    public_key,
+                    crate::APP_ROOT
                 );
                 
                 let profile = crate::utils::run_command_output(&profile_cmd)
