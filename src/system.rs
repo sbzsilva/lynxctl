@@ -47,7 +47,7 @@ pub fn print_motd_status() {
 pub fn sync_kernel() {
     println!("{}", style("Rebuilding LynxEdge Stack...").yellow());
 
-    // Phase 1: Interface & Peer Injection (Same as before)
+    // Phase 1: Interface & Peer Injection
     utils::run_command("doas ifconfig wg0 create 2>/dev/null || true");
     utils::run_command("doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up");
 
@@ -66,12 +66,12 @@ pub fn sync_kernel() {
     println!(" {} Syncing Master config to Unbound Jail...", style("→").blue());
     utils::run_command(&format!("doas cp {}/etc/unbound/* /var/unbound/etc/", APP_ROOT));
     
-    // Critical: Mirror SSL Certs for TLS forwarding
+    // Critical Fix: Mirror SSL Certs for TLS forwarding
     utils::run_command("doas mkdir -p /var/unbound/etc/ssl");
     utils::run_command("doas cp /etc/ssl/cert.pem /var/unbound/etc/ssl/cert.pem");
     utils::run_command("doas ln -sf /etc/ssl/cert.pem /var/unbound/etc/cert.pem");
     
-    // Finalize Jail Permissions
+    // Finalize Jail Permissions & Firewall
     utils::run_command("doas chown -R _unbound:_unbound /var/unbound/etc");
     utils::run_command("doas pfctl -f /etc/pf.conf");
     
