@@ -47,34 +47,31 @@ pub fn print_motd_status() {
 pub fn sync_kernel() {
     println!("{}", style("Rebuilding LynxEdge Stack...").yellow());
 
-    // Phase 1: WireGuard Interface Management
-    if !utils::run_command("doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up 2>/dev/null") {
-        utils::run_command("doas ifconfig wg0 create && doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up");
-    }
+    // Phase 1: Ensure Interface Exists
+    utils::run_command("doas ifconfig wg0 create 2>/dev/null || true");
+    utils::run_command("doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up");
 
-    // Phase 2: Server Key Application
+    // Phase 2: Set Server Key
     let key_cmd = format!("doas wg set wg0 private-key {}/etc/wireguard/keys/server.key", APP_ROOT);
     utils::run_command(&key_cmd);
 
-    // Phase 3: Peer Synchronization
-    utils::run_command("doas wg show wg0 peers | while read -r peer; do doas wg set wg0 peer \"$peer\" remove; done");
-
-    let atomic_push_cmd = format!(
+    // Phase 3: Peer Injection (Simplified & Robust)
+    println!(" {} Injecting active peers into kernel...", style("→").blue());
+    let peer_cmd = format!(
         "for f in {}/etc/wireguard/clients/*.conf; do \
-        pub=$(grep 'PublicKey' $f | tail -n 1 | awk '{{print $NF}}'); \
-        ip=$(grep 'Address' $f | awk '{{print $3}}' | cut -d'/' -f1); \
-        if [ -n \"$pub\" ] && [ -n \"$ip\" ]; then \
-        doas wg set wg0 peer \"$pub\" allowed-ips \"$ip/32\"; fi; done",
+         pub=$(grep '# PublicKey:' \"$f\" | awk '{{print $NF}}'); \
+         ip=$(grep 'Address' \"$f\" | awk '{{print $3}}' | cut -d'/' -f1); \
+         if [ -n \"$pub\" ] && [ -n \"$ip\" ]; then \
+         doas wg set wg0 peer \"$pub\" allowed-ips \"$ip/32\"; \
+         fi; done",
         APP_ROOT
     );
-    utils::run_command(&atomic_push_cmd);
+    utils::run_command(&peer_cmd);
 
-    // Phase 4: Partition-Safe Jail Synchronization
-    println!(" {} Syncing Master config to Unbound Jail...", style("→").blue());
+    // Phase 4: Jail & Firewall Sync
     utils::run_command(&format!("doas cp {}/etc/unbound/* /var/unbound/etc/", APP_ROOT));
-    utils::run_command("doas chown -R root:wheel /var/unbound/etc");
-    
     utils::run_command("doas pfctl -f /etc/pf.conf");
+    
     println!("{}", style("Sync Complete. Appliance is live.").green());
 }
 
