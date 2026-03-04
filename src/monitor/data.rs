@@ -115,14 +115,20 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 }
 
 pub fn get_top_blocked_domains() -> Vec<String> {
-    // Corrected to use appliance log path
-    let cmd = format!("doas grep 'NXDOMAIN' {}/logs/unbound.log | tail -n 20 | awk '{{print $5}}'", APP_ROOT);
+    // We look for 'NXDOMAIN' and then grab the domain name.
+    // In OpenBSD logs, the domain is often the field right before 'NXDOMAIN' or the last field.
+    // This command looks for the pattern and takes the domain name regardless of column.
+    let cmd = format!(
+        "doas tail -n 500 {}/logs/unbound.log | grep 'NXDOMAIN' | awk '{{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}}'", 
+        APP_ROOT
+    );
+
     if let Some(output) = utils::run_command_output(&cmd) {
         let mut domains: Vec<String> = output.lines()
             .map(|s| s.trim_end_matches('.').to_string())
-            .filter(|s| !s.is_empty()).collect();
+            .filter(|s| !s.is_empty())
+            .collect();
         domains.reverse();
-        domains.dedup();
         return domains;
     }
     vec![]
