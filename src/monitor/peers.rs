@@ -13,11 +13,18 @@ pub fn get_active_peers_with_health() -> Vec<(String, String, String, u64)> {
                 let rx = parts[5].parse::<u64>().unwrap_or(0);
                 let tx = parts[6].parse::<u64>().unwrap_or(0);
 
-                // UPDATED: Points to appliance client path
-                let profile_cmd = format!("doas grep -l '{}' {}/etc/wireguard/clients/*.conf", public_key, APP_ROOT);
+                // FIX: Search for the key string anywhere in the config files to match it to a filename
+                let profile_cmd = format!("doas grep -l '{}' /etc/wireguard/clients/*.conf", public_key);
                 let profile = crate::utils::run_command_output(&profile_cmd)
                     .map(|path| path.trim().split('/').last().unwrap_or("").replace(".conf", ""))
-                    .unwrap_or_else(|| format!("Key:{}..", &public_key[0..6]));
+                    .unwrap_or_else(|| {
+                        // If it's a generic key, show a shorter version for the UI
+                        if public_key.len() > 10 {
+                            format!("Key:{}..", &public_key[0..6])
+                        } else {
+                            "Unknown".to_string()
+                        }
+                    });
 
                 let transfer_str = format!("{:.2}↑ / {:.2}↓ MB", tx as f32 / 1.0e6, rx as f32 / 1.0e6);
                 peer_data.push((profile, endpoint, transfer_str, handshake));

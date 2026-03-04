@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use crate::{utils, APP_ROOT}; // Use APP_ROOT for path consistency
 
-const HISTORY_LIMIT: usize = 120;
+const HISTORY_LIMIT: usize = 60;
 
 #[derive(Debug, Default)]
 pub struct NetStats {
@@ -56,17 +56,22 @@ impl NetStats {
 }
 
 pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
-    if let Some(output) = utils::run_command_output(&format!("wg show {} transfer | head -n 1", ifname)) {
+    // FIX: Sum all peer transfers to get total interface traffic
+    let cmd = format!("doas wg show {} transfer | awk '{{rx += $2; tx += $3}} END {{print rx, tx}}'", ifname);
+    if let Some(output) = utils::run_command_output(&cmd) {
         let parts: Vec<&str> = output.split_whitespace().collect();
-        if parts.len() >= 3 {
-            if let (Ok(rx_val), Ok(tx_val)) = (parts[1].parse::<u64>(), parts[2].parse::<u64>()) {
-                stats.kbps_rx = ((rx_val.saturating_sub(stats.last_rx) * 8) / 1024) as u32;
-                stats.kbps_tx = ((tx_val.saturating_sub(stats.last_tx) * 8) / 1024) as u32;
+        if parts.len() >= 2 {
+            if let (Ok(rx_val), Ok(tx_val)) = (parts[0].parse::<u64>(), parts[1].parse::<u64>()) {
+                // Calculate kbps based on the 1-second tick rate
+                stats.kbps_rx = ((rx_val.saturating_sub(stats.last_rx)) * 8 / 1024) as u32;
+                stats.kbps_tx = ((tx_val.saturating_sub(stats.last_tx)) * 8 / 1024) as u32;
+                
                 stats.last_rx = rx_val;
                 stats.last_tx = tx_val;
 
                 stats.rx_history.push_back(stats.kbps_rx as u64);
                 stats.tx_history.push_back(stats.kbps_tx as u64);
+                
                 if stats.rx_history.len() > HISTORY_LIMIT {
                     stats.rx_history.pop_front();
                     stats.tx_history.pop_front();
@@ -120,9 +125,9 @@ pub fn get_top_blocked_domains() -> Vec<String> {
 }
 
 pub fn get_live_blocked_stats() -> (Vec<String>, Vec<u32>) {
-    // Corrected to use appliance log path
-    let cmd = format!("doas grep 'NXDOMAIN' {}/logs/unbound.log | awk '{{print $5}}' | sort | uniq -c | sort -nr | head -10", APP_ROOT);
-    if let Some(output) = utils::run_command_output(&cmd) {
+    // IMPROVED: Count unique blocked domains from the log
+    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | awk '{print $5}' | sort | uniq -c | sort -nr | head -10";
+    if let Some(output) = utils::run_command_output(cmd) {
         let mut domains = Vec::new();
         let mut counts = Vec::new();
         for line in output.lines() {
