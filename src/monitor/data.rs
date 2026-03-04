@@ -116,27 +116,23 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 
 pub fn get_top_blocked_domains() -> Vec<String> {
     // We look for 'NXDOMAIN' and then grab the domain name.
-    // In OpenBSD logs, the domain is often the field right before 'NXDOMAIN' or the last field.
-    // This command looks for the pattern and takes the domain name regardless of column.
-    let cmd = format!(
-        "doas tail -n 500 {}/logs/unbound.log | grep 'NXDOMAIN' | awk '{{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}}'", 
-        APP_ROOT
-    );
+    // This command finds 'NXDOMAIN' and prints the field immediately before it
+    let cmd = "doas tail -n 500 /var/unbound/unbound.log | grep 'NXDOMAIN' | awk '{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}'";
 
-    if let Some(output) = utils::run_command_output(&cmd) {
+    if let Some(output) = utils::run_command_output(cmd) {
         let mut domains: Vec<String> = output.lines()
             .map(|s| s.trim_end_matches('.').to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        domains.reverse();
+        domains.reverse(); // Show newest at the top
         return domains;
     }
     vec![]
 }
 
 pub fn get_live_blocked_stats() -> (Vec<String>, Vec<u32>) {
-    // IMPROVED: Count unique blocked domains from the log
-    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | awk '{print $5}' | sort | uniq -c | sort -nr | head -10";
+    // Updated to use the same logic as Recent Blocks for consistency
+    let cmd = "doas grep 'NXDOMAIN' /var/unbound/unbound.log | awk '{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}' | sort | uniq -c | sort -nr | head -10";
     if let Some(output) = utils::run_command_output(cmd) {
         let mut domains = Vec::new();
         let mut counts = Vec::new();
