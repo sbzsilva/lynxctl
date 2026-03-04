@@ -83,25 +83,28 @@ pub fn update_ads() {
     println!("{}", style("-> Initiating Threat Intelligence Sync...").bold());
     let out_path = format!("{}/etc/unbound/oisd_blocklist.conf", APP_ROOT);
     
+    // We use -w "%{http_code}" to see exactly what happened
     let curl_cmd = format!(
-        "doas -u lynxedge curl -sL --dns-servers 9.9.9.9 https://big.oisd.nl/unbound -o {}", 
+        "doas -u lynxedge curl -f -sSL -w \"%%{{http_code}}\" --cacert /etc/ssl/cert.pem https://big.oisd.nl/unbound -o {}", 
         out_path
     );
 
-    if utils::run_command(&curl_cmd) {
-        println!(" {} Downloaded OISD Big list.", style("✓").green());
+    let output = utils::run_command_output(&curl_cmd);
+    let status = output.as_deref().unwrap_or("000").trim();
+
+    if status == "200" {
+        println!(" {} Downloaded OISD Big list (HTTP 200).", style("✓").green());
         
-        println!(" {} Deploying to Unbound Jail...", style("→").blue());
+        // Push to jail
         utils::run_command(&format!("doas cp {} /var/unbound/etc/oisd_blocklist.conf", out_path));
         
         if utils::run_command("doas rcctl restart unbound") {
             println!(" {} Appliance updated and DNS shield restarted.", style("✓").green());
         }
     } else {
-        eprintln!(
-            " {} Update failed. Verify that user 'lynxedge' has egress permission in PF.", 
-            style("✗").red()
-        );
+        eprintln!(" {} Update failed.", style("✗").red());
+        eprintln!("    {} Error Code: {}", style("!").yellow(), status);
+        eprintln!("    {} check: 1. PF Egress | 2. Write perms on /opt/lynxedge/etc/unbound/", style("→").dim());
     }
 }
 
