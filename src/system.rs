@@ -47,16 +47,10 @@ pub fn print_motd_status() {
 pub fn sync_kernel() {
     println!("{}", style("Rebuilding LynxEdge Stack...").yellow());
 
-    // Phase 1: Ensure Interface Exists
+    // Phase 1: Interface & Peer Injection (Same as before)
     utils::run_command("doas ifconfig wg0 create 2>/dev/null || true");
     utils::run_command("doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up");
 
-    // Phase 2: Set Server Key
-    let key_cmd = format!("doas wg set wg0 private-key {}/etc/wireguard/keys/server.key", APP_ROOT);
-    utils::run_command(&key_cmd);
-
-    // Phase 3: Peer Injection (Simplified & Robust)
-    println!(" {} Injecting active peers into kernel...", style("→").blue());
     let peer_cmd = format!(
         "for f in {}/etc/wireguard/clients/*.conf; do \
          pub=$(grep '# PublicKey:' \"$f\" | awk '{{print $NF}}'); \
@@ -68,8 +62,17 @@ pub fn sync_kernel() {
     );
     utils::run_command(&peer_cmd);
 
-    // Phase 4: Jail & Firewall Sync
+    // Phase 2: Secure Jail Synchronization
+    println!(" {} Syncing Master config to Unbound Jail...", style("→").blue());
     utils::run_command(&format!("doas cp {}/etc/unbound/* /var/unbound/etc/", APP_ROOT));
+    
+    // Critical: Mirror SSL Certs for TLS forwarding
+    utils::run_command("doas mkdir -p /var/unbound/etc/ssl");
+    utils::run_command("doas cp /etc/ssl/cert.pem /var/unbound/etc/ssl/cert.pem");
+    utils::run_command("doas ln -sf /etc/ssl/cert.pem /var/unbound/etc/cert.pem");
+    
+    // Finalize Jail Permissions
+    utils::run_command("doas chown -R _unbound:_unbound /var/unbound/etc");
     utils::run_command("doas pfctl -f /etc/pf.conf");
     
     println!("{}", style("Sync Complete. Appliance is live.").green());
