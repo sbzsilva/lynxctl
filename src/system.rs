@@ -83,7 +83,7 @@ pub fn update_ads() {
     println!("{}", style("-> Initiating Threat Intelligence Sync...").bold());
     let out_path = format!("{}/etc/unbound/oisd_blocklist.conf", APP_ROOT);
     
-    // We use -w "%{http_code}" to see exactly what happened
+    // We escape the percent signs by doubling them: %%
     let curl_cmd = format!(
         "doas -u lynxedge curl -f -sSL -w \"%%{{http_code}}\" --cacert /etc/ssl/cert.pem https://big.oisd.nl/unbound -o {}", 
         out_path
@@ -103,6 +103,7 @@ pub fn update_ads() {
         }
     } else {
         eprintln!(" {} Update failed.", style("✗").red());
+        // This will now show the actual number (e.g., 000, 403, 404)
         eprintln!("    {} Error Code: {}", style("!").yellow(), status);
         eprintln!("    {} check: 1. PF Egress | 2. Write perms on /opt/lynxedge/etc/unbound/", style("→").dim());
     }
