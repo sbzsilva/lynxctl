@@ -2,6 +2,39 @@ use console::style;
 use crate::utils;
 use crate::APP_ROOT;
 
+/// Prints a status dashboard to the console on the console
+pub fn print_motd_status() {
+    let wan_ip = utils::run_command_output("curl -s ifconfig.me").unwrap_or_else(|| "OFFLINE".to_string());
+    
+    // Service Status Icons
+    let unbound_status = if utils::is_service_running("unbound") {
+        style("● ACTIVE").green().bold()
+    } else {
+        style("○ FAILED").red().blink()
+    };
+
+    let wg_status = if utils::run_command_output("ifconfig wg0").is_some() {
+        style("● ACTIVE").green().bold()
+    } else {
+        style("○ DOWN").red()
+    };
+
+    // Dark Mode Dashboard Output
+    println!();
+    println!("  {}", style("   _                 ").green());
+    println!("  {}", style("  / \\_   LynxEdge    ").green());
+    println!("  {}", style("  \\ / \\  Appliance   ").green());
+    println!("  {}", style("   \\_\\/  Status v5.0 ").green());
+    println!();
+    println!("  {} {}", style("SYSTEM CONTEXT").bold().dim(), "─".repeat(26));
+    println!("  {:<15} {}", style("WAN ENDPOINT:").dim(), style(wan_ip).yellow());
+    println!("  {:<15} {}", style("DNS SHIELD:").dim(), unbound_status);
+    println!("  {:<15} {}", style("VPN TUNNEL:").dim(), wg_status);
+    println!("  {}", "─".repeat(40).dim());
+    println!("  {} Run {} for live metrics.", style("NOTICE:").yellow().dim(), style("lynxctl network live").cyan());
+    println!();
+}
+
 /// Rebuilds the kernel state, syncs configurations, and refreshes the firewall
 pub fn sync_kernel() {
     println!("{}", style("Rebuilding LynxEdge Stack...").yellow());
