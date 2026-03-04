@@ -27,27 +27,35 @@ pub fn sync_kernel() {
     );
     utils::run_command(&atomic_push_cmd);
 
-    // Phase 4: Firewall
+    // Phase 4: Firewall & Jail Sync
+    utils::run_command(&format!("doas cp {}/etc/unbound/* /var/unbound/etc/", APP_ROOT));
     utils::run_command("doas pfctl -f /etc/pf.conf");
     println!("{}", style("Sync Complete. Appliance is live.").green());
 }
 
 pub fn update_ads() {
-    println!(" -> Fetching Threat Intelligence (OISD)...");
+    println!("{}", style("-> Initiating Threat Intelligence Sync...").bold());
     let out_path = format!("{}/etc/unbound/oisd_blocklist.conf", APP_ROOT);
-    // Use DNS Fallback to bypass local resolution issues during updates
-    let curl_cmd = format!("curl -sL --dns-servers 9.9.9.9 https://big.oisd.nl/unbound -o {}", out_path);
+    
+    // Attempt download as service user
+    let curl_cmd = format!("doas -u lynxedge curl -sL --dns-servers 9.9.9.9 https://big.oisd.nl/unbound -o {}", out_path);
 
     if utils::run_command(&curl_cmd) {
-        println!(" {} Intelligence updated.", style("✓").green());
-        utils::run_command("doas rcctl restart unbound");
+        println!(" {} Downloaded OISD Big list.", style("✓").green());
+        
+        println!(" {} Deploying to Unbound Jail...", style("→").blue());
+        utils::run_command(&format!("doas cp {} /var/unbound/etc/oisd_blocklist.conf", out_path));
+        
+        if utils::run_command("doas rcctl restart unbound") {
+            println!(" {} Appliance updated and DNS shield restarted.", style("✓").green());
+        }
     } else {
-        eprintln!(" {} Update failed. Check appliance egress rules.", style("✗").red());
+        eprintln!(" {} Update failed. Check appliance egress rules in PF.", style("✗").red());
     }
 }
 
 pub fn run_security_audit() {
-    println!("{}", style("--- LynxEdge Appliance Audit ---").bold().cyan());
+    println!("{}", style("--- LynxEdge Appliance Audit v5.0 ---").bold().cyan());
     let mut issues = 0;
 
     // Check identity
@@ -58,12 +66,18 @@ pub fn run_security_audit() {
         issues += 1;
     }
 
-    // Check appliance paths
-    let paths = [
-        format!("{}/etc/wireguard/keys", APP_ROOT),
-        format!("{}/etc/unbound", APP_ROOT),
-        format!("{}/logs", APP_ROOT)
-    ];
+    // Jail-Bridge Check
+    let opt_inode = utils::run_command_output("ls -i /opt/lynxedge/etc/unbound/unbound.conf | awk '{print $1}'");
+    let var_inode = utils::run_command_output("ls -i /var/unbound/etc/unbound.conf | awk '{print $1}'");
+    if opt_inode == var_inode && opt_inode.is_some() {
+        println!(" {} Jail-Bridge synchronized.", style("✓").green());
+    } else {
+        println!(" {} WARNING: Jail files out of sync.", style("!").yellow());
+        issues += 1;
+    }
+
+    // Path Write Access
+    let paths = [format!("{}/etc/wireguard/keys", APP_ROOT), format!("{}/logs", APP_ROOT)];
     for path in &paths {
         if utils::run_command(&format!("doas test -w {}", path)) {
             println!(" {} Write access to {} verified.", style("✓").green(), path);

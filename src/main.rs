@@ -11,7 +11,6 @@ mod system;
 mod utils;
 mod monitor;
 
-// Define the global appliance root
 pub const APP_ROOT: &str = "/opt/lynxedge";
 
 fn main() {
