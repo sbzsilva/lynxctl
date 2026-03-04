@@ -2,7 +2,7 @@ use console::style;
 use crate::utils;
 use crate::APP_ROOT;
 
-/// Prints a status dashboard to the console on the console
+/// Prints a styled status dashboard for the login MOTD
 pub fn print_motd_status() {
     let wan_ip = utils::run_command_output("curl -s ifconfig.me").unwrap_or_else(|| "OFFLINE".to_string());
     
@@ -26,11 +26,13 @@ pub fn print_motd_status() {
     println!("  {}", style("  \\ / \\  Appliance   ").green());
     println!("  {}", style("   \\_\\/  Status v5.0 ").green());
     println!();
-    println!("  {} {}", style("SYSTEM CONTEXT").bold().dim(), "─".repeat(26));
+    
+    // Fixed: wrapped strings in style() before calling .dim()
+    println!("  {} {}", style("SYSTEM CONTEXT").bold().dim(), style("─".repeat(26)).dim());
     println!("  {:<15} {}", style("WAN ENDPOINT:").dim(), style(wan_ip).yellow());
     println!("  {:<15} {}", style("DNS SHIELD:").dim(), unbound_status);
     println!("  {:<15} {}", style("VPN TUNNEL:").dim(), wg_status);
-    println!("  {}", "─".repeat(40).dim());
+    println!("  {}", style("─".repeat(40)).dim());
     println!("  {} Run {} for live metrics.", style("NOTICE:").yellow().dim(), style("lynxctl network live").cyan());
     println!();
 }
@@ -40,7 +42,6 @@ pub fn sync_kernel() {
     println!("{}", style("Rebuilding LynxEdge Stack...").yellow());
 
     // Phase 1: WireGuard Interface Management
-    // Ensures wg0 is active with the correct internal gateway IP
     if !utils::run_command("doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up 2>/dev/null") {
         utils::run_command("doas ifconfig wg0 create && doas ifconfig wg0 inet 10.200.200.1 255.255.255.0 up");
     }
@@ -50,7 +51,6 @@ pub fn sync_kernel() {
     utils::run_command(&key_cmd);
 
     // Phase 3: Peer Synchronization
-    // Flushes current peers and re-injects them from the appliance profile directory
     utils::run_command("doas wg show wg0 peers | while read -r peer; do doas wg set wg0 peer \"$peer\" remove; done");
 
     let atomic_push_cmd = format!(
@@ -64,12 +64,10 @@ pub fn sync_kernel() {
     utils::run_command(&atomic_push_cmd);
 
     // Phase 4: Partition-Safe Jail Synchronization
-    // Uses atomic copy to bridge configurations across disk partitions (e.g., /opt to /var)
     println!(" {} Syncing Master config to Unbound Jail...", style("→").blue());
     utils::run_command(&format!("doas cp {}/etc/unbound/* /var/unbound/etc/", APP_ROOT));
     utils::run_command("doas chown -R root:wheel /var/unbound/etc");
     
-    // Refresh Packet Filter rules
     utils::run_command("doas pfctl -f /etc/pf.conf");
     println!("{}", style("Sync Complete. Appliance is live.").green());
 }
@@ -79,7 +77,6 @@ pub fn update_ads() {
     println!("{}", style("-> Initiating Threat Intelligence Sync...").bold());
     let out_path = format!("{}/etc/unbound/oisd_blocklist.conf", APP_ROOT);
     
-    // Attempt download as the dedicated service user to verify egress permissions
     let curl_cmd = format!(
         "doas -u lynxedge curl -sL --dns-servers 9.9.9.9 https://big.oisd.nl/unbound -o {}", 
         out_path
@@ -102,12 +99,11 @@ pub fn update_ads() {
     }
 }
 
-/// Performs a multi-point security and integrity audit of the appliance
+/// Performs a multi-point security and integrity audit
 pub fn run_security_audit() {
     println!("{}", style("--- LynxEdge Appliance Audit v5.0 ---").bold().cyan());
     let mut issues = 0;
 
-    // 1. Identity Verification
     if utils::run_command_output("id lynxedge").is_some() {
         println!(" {} Identity 'lynxedge' verified.", style("✓").green());
     } else {
@@ -115,8 +111,6 @@ pub fn run_security_audit() {
         issues += 1;
     }
 
-    // 2. Jail-Bridge Integrity (MD5 Content Verification)
-    // Bypasses Inode limitations on split partitions by comparing file hashes
     let opt_hash = utils::run_command_output(&format!("md5 -q {}/etc/unbound/unbound.conf", APP_ROOT));
     let var_hash = utils::run_command_output("md5 -q /var/unbound/etc/unbound.conf");
 
@@ -127,8 +121,6 @@ pub fn run_security_audit() {
         issues += 1;
     }
 
-    // 3. Service Egress Validation
-    // Tests if the 'lynxedge' identity can actually reach the internet via PF
     if utils::run_command("doas -u lynxedge curl -sI --connect-timeout 2 https://google.com > /dev/null") {
         println!(" {} Appliance egress (service user) verified.", style("✓").green());
     } else {
@@ -136,7 +128,6 @@ pub fn run_security_audit() {
         issues += 1;
     }
 
-    // 4. Filesystem Write Permissions
     let paths = [
         format!("{}/etc/wireguard/keys", APP_ROOT), 
         format!("{}/logs", APP_ROOT)
@@ -153,7 +144,6 @@ pub fn run_security_audit() {
     println!("\nAudit finished with {} issues.", issues);
 }
 
-/// Displays external and internal network context
 pub fn netinfo() {
     println!("{}", style("Appliance Network Context:").bold());
     if let Some(wan) = utils::run_command_output("curl -s ifconfig.me") {
@@ -164,7 +154,6 @@ pub fn netinfo() {
     }
 }
 
-/// Standard OpenBSD system maintenance
 pub fn upgrade_system() {
     println!("{}", style("Starting Full System Upgrade...").cyan());
     utils::run_command("doas pkg_add -u && doas syspatch");
