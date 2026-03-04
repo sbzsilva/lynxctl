@@ -56,26 +56,30 @@ impl NetStats {
 }
 
 pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
-    // FIX: Sum all peer transfers to get total interface traffic
+    // Sum all peer data to get total interface throughput
     let cmd = format!("doas wg show {} transfer | awk '{{rx += $2; tx += $3}} END {{print rx, tx}}'", ifname);
+    
     if let Some(output) = utils::run_command_output(&cmd) {
         let parts: Vec<&str> = output.split_whitespace().collect();
         if parts.len() >= 2 {
-            if let (Ok(rx_val), Ok(tx_val)) = (parts[0].parse::<u64>(), parts[1].parse::<u64>()) {
-                // Calculate kbps based on the 1-second tick rate
-                stats.kbps_rx = ((rx_val.saturating_sub(stats.last_rx)) * 8 / 1024) as u32;
-                stats.kbps_tx = ((tx_val.saturating_sub(stats.last_tx)) * 8 / 1024) as u32;
-                
-                stats.last_rx = rx_val;
-                stats.last_tx = tx_val;
+            let current_rx = parts[0].parse::<u64>().unwrap_or(0);
+            let current_tx = parts[1].parse::<u64>().unwrap_or(0);
+
+            if stats.last_rx > 0 {
+                // Calculate bits per second (kbps)
+                stats.kbps_rx = ((current_rx.saturating_sub(stats.last_rx)) * 8 / 1024) as u32;
+                stats.kbps_tx = ((current_tx.saturating_sub(stats.last_tx)) * 8 / 1024) as u32;
 
                 stats.rx_history.push_back(stats.kbps_rx as u64);
                 stats.tx_history.push_back(stats.kbps_tx as u64);
-                
-                if stats.rx_history.len() > HISTORY_LIMIT {
-                    stats.rx_history.pop_front();
-                    stats.tx_history.pop_front();
-                }
+            }
+
+            stats.last_rx = current_rx;
+            stats.last_tx = current_tx;
+
+            if stats.rx_history.len() > HISTORY_LIMIT {
+                stats.rx_history.pop_front();
+                stats.tx_history.pop_front();
             }
         }
     }
