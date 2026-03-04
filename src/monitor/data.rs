@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use crate::{utils, APP_ROOT}; // Use APP_ROOT for path consistency
+use crate::utils;
 
 const HISTORY_LIMIT: usize = 60;
 
@@ -41,7 +41,6 @@ impl NetStats {
         self.tx_history.iter().cloned().max().unwrap_or(0)
     }
 
-    // Explicitly provided for the UI Chart [Required by ui.rs]
     pub fn get_rx_chart_data(&self) -> Vec<(f64, f64)> {
         self.rx_history.iter().enumerate()
             .map(|(i, &v)| (i as f64, v as f64))
@@ -66,7 +65,7 @@ pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
             let current_tx = parts[1].parse::<u64>().unwrap_or(0);
 
             if stats.last_rx > 0 {
-                // Calculate bits per second (kbps)
+                // Calculate bits per second (kbps) delta
                 stats.kbps_rx = ((current_rx.saturating_sub(stats.last_rx)) * 8 / 1024) as u32;
                 stats.kbps_tx = ((current_tx.saturating_sub(stats.last_tx)) * 8 / 1024) as u32;
 
@@ -86,7 +85,8 @@ pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
 }
 
 pub fn get_dns_stats(stats: &mut DnsStats) {
-    if let Some(output) = utils::run_command_output("unbound-control stats_noreset") {
+    // Use unbound-control to fetch live metrics from the service jail
+    if let Some(output) = utils::run_command_output("doas unbound-control stats_noreset") {
         let mut current_total: i32 = 0;
         for line in output.lines() {
             if line.starts_with("total.num.queries=") {
@@ -96,13 +96,17 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
             } else if line.starts_with("num.answer.rcode.NXDOMAIN=") {
                 stats.blocked_count = line.split('=').nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
             } else if line.starts_with("total.answer.time.avg=") {
+                // Convert response time to milliseconds
                 stats.avg_response_time = line.split('=').nth(1)
                     .and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0) * 1000.0;
             }
         }
         
+        // Track query delta for history charts
         let delta = current_total.saturating_sub(stats.total_queries);
-        stats.query_history.push_back(delta as u64);
+        if stats.total_queries > 0 {
+            stats.query_history.push_back(delta as u64);
+        }
         if stats.query_history.len() > HISTORY_LIMIT { stats.query_history.pop_front(); }
 
         stats.total_queries = current_total;
@@ -115,7 +119,7 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 }
 
 pub fn get_top_blocked_domains() -> Vec<String> {
-    // Use APP_ROOT for consistent path handling
+    // Use crate::APP_ROOT directly to resolve the import warning and target appliance logs
     let cmd = format!(
         "doas tail -n 500 {}/logs/unbound.log | grep 'NXDOMAIN' | awk '{{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}}'", 
         crate::APP_ROOT
@@ -126,14 +130,13 @@ pub fn get_top_blocked_domains() -> Vec<String> {
             .map(|s| s.trim_end_matches('.').to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        domains.reverse(); // Newest at the top
+        domains.reverse(); // Newest blocks appear first in the TUI list
         return domains;
     }
     vec![]
 }
 
 pub fn get_live_blocked_stats() -> (Vec<String>, Vec<u32>) {
-    // Use APP_ROOT for consistent path handling
     let cmd = format!(
         "doas grep 'NXDOMAIN' {}/logs/unbound.log | awk '{{for(i=1;i<=NF;i++) if($i~/NXDOMAIN/) print $(i-1)}}' | sort | uniq -c | sort -nr | head -10",
         crate::APP_ROOT

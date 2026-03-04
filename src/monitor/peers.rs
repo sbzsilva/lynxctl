@@ -1,7 +1,7 @@
 pub fn get_active_peers_with_health() -> Vec<(String, String, String, u64)> {
     let mut peer_data = Vec::new();
 
-    // We get the dump which includes the Public Key
+    // Fetch the WireGuard dump which contains the public keys and transfer data
     if let Some(output) = crate::utils::run_command_output("doas wg show wg0 dump") {
         for line in output.lines().skip(1) {
             let parts: Vec<&str> = line.split('\t').collect();
@@ -12,7 +12,8 @@ pub fn get_active_peers_with_health() -> Vec<(String, String, String, u64)> {
                 let rx = parts[5].parse::<u64>().unwrap_or(0);
                 let tx = parts[6].parse::<u64>().unwrap_or(0);
 
-                // FIX: Look specifically in the correct directory for the profile
+                // FIXED: Use crate::APP_ROOT directly to resolve profile names from the appliance path
+                // This searches for the public key inside your .conf files in /opt/lynxedge
                 let profile_cmd = format!(
                     "doas grep -l '{}' {}/etc/wireguard/clients/*.conf", 
                     public_key,
@@ -20,9 +21,15 @@ pub fn get_active_peers_with_health() -> Vec<(String, String, String, u64)> {
                 );
                 
                 let profile = crate::utils::run_command_output(&profile_cmd)
-                    .map(|path| path.trim().split('/').last().unwrap_or("").replace(".conf", ""))
+                    .map(|path| {
+                        path.trim()
+                            .split('/')
+                            .last()
+                            .unwrap_or("")
+                            .replace(".conf", "")
+                    })
                     .unwrap_or_else(|| {
-                        // Fallback if no .conf file contains this public key
+                        // Fallback display if the key isn't found in any client configuration file
                         if public_key.len() > 10 {
                             format!("Key:{}..", &public_key[0..6])
                         } else {
@@ -30,7 +37,9 @@ pub fn get_active_peers_with_health() -> Vec<(String, String, String, u64)> {
                         }
                     });
 
+                // Format the data transfer as Megabytes with arrows for direction
                 let transfer_str = format!("{:.2}↑ / {:.2}↓ MB", tx as f32 / 1.0e6, rx as f32 / 1.0e6);
+                
                 peer_data.push((profile, endpoint, transfer_str, handshake));
             }
         }
