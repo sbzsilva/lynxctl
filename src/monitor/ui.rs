@@ -23,30 +23,24 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
             Constraint::Length(1),       // Footer
         ]).split(f.size());
 
-    // --- MODERN HEADER WITH SERVICE STATUS ---
+    // --- SERVICE STATUS HEADER ---
     let unbound_status = if utils::is_service_running("unbound") {
         Span::styled("ACTIVE", Style::default().fg(Color::Green))
     } else {
         Span::styled("INACTIVE", Style::default().fg(Color::Red))
     };
 
-    let wg_status = if utils::run_command_output("ifconfig wg0 2>/dev/null | grep -q UP && echo ok").is_some() {
+    let wg_status = if utils::run_command_output("ifconfig wg0").is_some() {
         Span::styled("ACTIVE", Style::default().fg(Color::Green))
     } else {
-        Span::styled("INACTIVE", Style::default().fg(Color::Red))
+        Span::styled("DOWN", Style::default().fg(Color::Red))
     };
 
-    let header = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled(" LYNXEDGE CORE", Style::default().bold().fg(Color::Cyan)),
-            Span::raw(" | "),
-            Span::styled(format!("UPTIME: {}", get_system_uptime()), Style::default().dim()),
-        ]),
-        Line::from(vec![
-            Span::raw(" [UNBOUND: "), unbound_status, Span::raw("]"),
-            Span::raw("  [WIREGUARD: "), wg_status, Span::raw("]"),
-        ]),
-    ]).block(Block::default().borders(Borders::BOTTOM).border_style(Style::default().fg(Color::DarkGray)));
+    let header = Paragraph::new(Line::from(vec![
+        Span::raw(" DNS: "), unbound_status,
+        Span::raw(" | VPN: "), wg_status,
+        Span::raw(" | Uptime: "), Span::raw(get_system_uptime()),
+    ])).block(Block::default().title(" LynxEdge Gateway Monitor ").borders(Borders::ALL));
     
     f.render_widget(header, chunks[0]);
 

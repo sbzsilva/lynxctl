@@ -1,9 +1,43 @@
 use std::collections::VecDeque;
-use crate::{utils, APP_ROOT}; // Added APP_ROOT reference
+use crate::{utils, APP_ROOT};
 
 const HISTORY_LIMIT: usize = 120;
 
-// ... (NetStats and DnsStats structs remain the same)
+#[derive(Debug, Default)]
+pub struct NetStats {
+    pub last_rx: u64,
+    pub last_tx: u64,
+    pub kbps_rx: u32,
+    pub kbps_tx: u32,
+    pub rx_history: VecDeque<u64>,
+    pub tx_history: VecDeque<u64>,
+}
+
+#[derive(Debug, Default)]
+pub struct DnsStats {
+    pub total_queries: i32,
+    pub cache_hits: i32,
+    pub blocked_count: i32,
+    pub hit_rate: i32,
+    pub block_rate: i32,
+    pub avg_response_time: f32,
+    pub blocked_domains: Vec<String>,
+    pub query_history: VecDeque<u64>,
+}
+
+impl NetStats {
+    pub fn get_avg_rx(&self) -> u64 {
+        if self.rx_history.is_empty() { return 0; }
+        self.rx_history.iter().sum::<u64>() / self.rx_history.len() as u64
+    }
+    pub fn get_peak_rx(&self) -> u64 {
+        self.rx_history.iter().cloned().max().unwrap_or(0)
+    }
+    pub fn get_avg_tx(&self) -> u64 {
+        if self.tx_history.is_empty() { return 0; }
+        self.tx_history.iter().sum::<u64>() / self.tx_history.len() as u64
+    }
+}
 
 pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
     if let Some(output) = utils::run_command_output(&format!("wg show {} transfer | head -n 1", ifname)) {
@@ -27,7 +61,6 @@ pub fn get_net_stats(ifname: &str, stats: &mut NetStats) {
 }
 
 pub fn get_dns_stats(stats: &mut DnsStats) {
-    // Unbound-control uses the symlinked path automatically via its default config
     if let Some(output) = utils::run_command_output("unbound-control stats_noreset") {
         let mut current_total: i32 = 0;
         for line in output.lines() {
@@ -57,7 +90,6 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 }
 
 pub fn get_top_blocked_domains() -> Vec<String> {
-    // UPDATED: Points to appliance log path
     let cmd = format!("doas grep 'NXDOMAIN' {}/logs/unbound.log | tail -n 20 | awk '{{print $5}}'", APP_ROOT);
     if let Some(output) = utils::run_command_output(&cmd) {
         let mut domains: Vec<String> = output.lines()
@@ -71,7 +103,6 @@ pub fn get_top_blocked_domains() -> Vec<String> {
 }
 
 pub fn get_live_blocked_stats() -> (Vec<String>, Vec<u32>) {
-    // UPDATED: Points to appliance log path
     let cmd = format!("doas grep 'NXDOMAIN' {}/logs/unbound.log | awk '{{print $5}}' | sort | uniq -c | sort -nr | head -10", APP_ROOT);
     if let Some(output) = utils::run_command_output(&cmd) {
         let mut domains = Vec::new();
