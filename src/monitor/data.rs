@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use crate::{utils, APP_ROOT};
+use crate::{utils, APP_ROOT}; // Use APP_ROOT for path consistency
 
 const HISTORY_LIMIT: usize = 120;
 
@@ -36,6 +36,22 @@ impl NetStats {
     pub fn get_avg_tx(&self) -> u64 {
         if self.tx_history.is_empty() { return 0; }
         self.tx_history.iter().sum::<u64>() / self.tx_history.len() as u64
+    }
+    pub fn get_peak_tx(&self) -> u64 {
+        self.tx_history.iter().cloned().max().unwrap_or(0)
+    }
+
+    // Explicitly provided for the UI Chart [Required by ui.rs]
+    pub fn get_rx_chart_data(&self) -> Vec<(f64, f64)> {
+        self.rx_history.iter().enumerate()
+            .map(|(i, &v)| (i as f64, v as f64))
+            .collect()
+    }
+    
+    pub fn get_tx_chart_data(&self) -> Vec<(f64, f64)> {
+        self.tx_history.iter().enumerate()
+            .map(|(i, &v)| (i as f64, v as f64))
+            .collect()
     }
 }
 
@@ -90,6 +106,7 @@ pub fn get_dns_stats(stats: &mut DnsStats) {
 }
 
 pub fn get_top_blocked_domains() -> Vec<String> {
+    // Corrected to use appliance log path
     let cmd = format!("doas grep 'NXDOMAIN' {}/logs/unbound.log | tail -n 20 | awk '{{print $5}}'", APP_ROOT);
     if let Some(output) = utils::run_command_output(&cmd) {
         let mut domains: Vec<String> = output.lines()
@@ -103,6 +120,7 @@ pub fn get_top_blocked_domains() -> Vec<String> {
 }
 
 pub fn get_live_blocked_stats() -> (Vec<String>, Vec<u32>) {
+    // Corrected to use appliance log path
     let cmd = format!("doas grep 'NXDOMAIN' {}/logs/unbound.log | awk '{{print $5}}' | sort | uniq -c | sort -nr | head -10", APP_ROOT);
     if let Some(output) = utils::run_command_output(&cmd) {
         let mut domains = Vec::new();

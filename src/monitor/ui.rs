@@ -54,7 +54,7 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .constraints([Constraint::Min(40), Constraint::Length(34)])
         .split(inner_traffic);
 
-    // Chart Data and Logic
+    // Chart Data and Logic (Now resolving correctly)
     let rx_data = n.get_rx_chart_data();
     let tx_data = n.get_tx_chart_data();
     let peak = n.get_peak_rx().max(n.get_peak_tx()).max(1000) as f64;
@@ -90,7 +90,7 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
     ];
     f.render_widget(Paragraph::new(stats_text), traffic_split[1]);
 
-    // --- DNS STATS ---
+    // --- DNS STATS PANEL ---
     let dns_info = Paragraph::new(vec![
         Line::from(vec![
             Span::raw(" Total Queries: "), Span::styled(format!("{}", d.total_queries), Style::default().fg(Color::Cyan)),
@@ -122,7 +122,7 @@ pub fn render_dashboard(f: &mut Frame, n: &NetStats, d: &DnsStats, vpn_table_sta
         .block(Block::default().title(" Active VPN Sessions ").borders(Borders::ALL));
     f.render_stateful_widget(table, chunks[3], vpn_table_state);
 
-    // --- DUAL DNS PANELS ---
+    // --- DNS PANELS ---
     let dns_log_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
